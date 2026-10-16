@@ -11,9 +11,9 @@ digraph arquitectura {
     }
 
     subgraph cluster_ingesta {
-        label="Ingesta y versionado"; style="rounded,filled"; fillcolor="#EAF7EE"; color="#9CCBA9";
-        dataset [label="dataset.py\nrequests + pandas\ndescarga, codificación, fechas,\nduplicados, sin datos personales"];
-        manif   [label="data_manifest.json (en Git)\nregistros + SHA-256 por archivo\n→ data_version"];
+        label="Ingesta y versionado (make data)"; style="rounded,filled"; fillcolor="#EAF7EE"; color="#9CCBA9";
+        dataset [label="dataset.py\ncurl + pandas\ndescarga, codificación, fechas,\nduplicados; solo 5 columnas\n(sin datos personales)"];
+        manif   [label="manifest.py → data_manifest.json\n(en Git) registros + SHA-256\npor archivo → data_version"];
     }
 
     subgraph cluster_alm {
@@ -24,15 +24,15 @@ digraph arquitectura {
 
     subgraph cluster_proc {
         label="Procesamiento"; style="rounded,filled"; fillcolor="#F1ECF8"; color="#B8A6D6";
-        feat [label="features.py\ntabla estación × hora,\ncalendario, rezagos, capacidad,\npartición temporal 9 / 3 / 3"];
+        feat [label="features.py\ntabla estación × hora,\ncalendario, rezagos, capacidad,\netiqueta de P2,\npartición temporal 9 / 3 / 3"];
     }
 
     subgraph cluster_ent {
         label="Entrenamiento y evaluación"; style="rounded,filled"; fillcolor="#FBEAEA"; color="#DDA3A3";
-        runexp [label="run_experiments\n(un comando)"];
-        p1 [label="P1 · regresión\nmodeling/p1.py"];
-        p2 [label="P2 · clasificación\nmodeling/p2.py"];
-        p3 [label="P3 · clustering\nmodeling/p3.py"];
+        runexp [label="run_experiments\n(un comando: main()\nde P1, P2 y P3)"];
+        p1 [label="P1 · regresión\nbaseline semana anterior\n· HistGradientBoosting"];
+        p2 [label="P2 · clasificación 3 clases\nbaseline semana anterior\n· RandomForest"];
+        p3 [label="P3 · clustering\nKMeans (silhouette)"];
         {rank=same; p1; p2; p3;}
     }
 
@@ -61,7 +61,7 @@ digraph arquitectura {
     nom -> dataset;
     dataset -> raw;
     dataset -> proc;
-    dataset -> manif [label="genera"];
+    dataset -> manif [label="hash de raw\ny processed"];
     proc -> feat;
     feat -> p1; feat -> p2; feat -> p3;
     runexp -> p1; runexp -> p2; runexp -> p3;

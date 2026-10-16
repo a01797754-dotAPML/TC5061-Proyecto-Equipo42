@@ -1,6 +1,6 @@
 # ML Canvas — Proyecto MiBici (Equipo 42)
 
-TC5061 MLOps · Etapa 1 · Versión 1 (con cifras reales de la exploración y del baseline de P1). Lo de P2 y P3 es una propuesta: Víctor (P2) y Andrea (P3) la ajustan con sus resultados.
+TC5061 MLOps · Etapa 1 · Versión 2 (16 oct 2026). P2 queda alineada a la definición de Víctor (PR #5): clasificación de 3 clases por estación y hora. Lo de P3 sigue como propuesta para que Andrea la ajuste con sus resultados. La versión visual de este Canvas está en `references/ml_canvas.png`.
 
 Formato basado en el Machine Learning Canvas de Louis Dorard.
 
@@ -8,27 +8,27 @@ Formato basado en el Machine Learning Canvas de Louis Dorard.
 
 | | P1 | P2 | P3 |
 |---|---|---|---|
-| Tarea | Regresión | Clasificación binaria | Clustering |
-| Qué se predice o agrupa | Viajes que inician en la estación | Si la estación estará en riesgo de quedarse sin bicis o sin anclajes | Grupos de estaciones con perfil de uso parecido |
-| Granularidad | Estación × hora | Estación × hora de corte | Estación |
-| Horizonte | Siguiente hora | Siguientes 3 horas | No predictivo; se recalcula cada trimestre |
+| Tarea | Regresión | Clasificación multiclase (3 clases) | Clustering |
+| Qué se predice o agrupa | Viajes que inician en la estación | Nivel de riesgo de la estación: bajo, desabasto (se queda sin bicis) o saturación (se queda sin anclajes) | Grupos de estaciones con perfil de uso parecido |
+| Granularidad | Estación × hora | Estación × hora | Estación |
+| Horizonte | Siguiente hora | Siguiente hora | No predictivo; se recalcula cada trimestre |
 | Usuario | Operador del sistema | Equipo de rebalanceo | Planeación urbana y expansión |
 
 ---
 
 ## 1. Propuesta de valor
 - **Operador (P1):** anticipar la demanda de la siguiente hora en cada estación para planear la flota en lugar de reaccionar a quejas.
-- **Rebalanceo (P2):** una lista priorizada de estaciones en riesgo para mover bicis antes de que la estación se vacíe o se llene.
+- **Rebalanceo (P2):** saber, una hora antes, qué estaciones tienen riesgo de quedarse sin bicis y cuáles de quedarse sin anclajes, para llevar o retirar bicis antes de que el usuario se quede sin servicio.
 - **Planeación (P3):** identificar tipos de estaciones (por ejemplo, de origen matutino, de destino laboral o de uso recreativo de fin de semana) y ver dónde se ubican para decidir expansión y capacidad.
 
 ## 2. Tarea de ML
 - P1: regresión de un conteo (viajes por estación y hora).
-- P2: clasificación binaria con una etiqueta construida a partir del flujo neto y la capacidad, porque los datos no incluyen el inventario.
+- P2: clasificación multiclase (0 bajo riesgo, 1 desabasto, 2 saturación) con una etiqueta construida a partir del flujo neto de la hora y la capacidad, porque los datos no incluyen el inventario de bicis.
 - P3: clustering no supervisado sobre el perfil de uso de cada estación.
 
 ## 3. Decisiones
 - P1: cuántas bicis conviene tener en cada estación o zona en la siguiente hora.
-- P2: a qué estaciones mandar camionetas en las próximas horas y en qué orden.
+- P2: a qué estaciones llevar bicis (riesgo de desabasto) y de cuáles retirarlas (riesgo de saturación) en la siguiente hora, y en qué orden.
 - P3: en qué zonas abrir o ampliar estaciones y qué capacidad darles según el tipo de uso.
 
 ## 4. Cómo se hacen las predicciones
@@ -39,7 +39,7 @@ Formato basado en el Machine Learning Canvas de Louis Dorard.
 - Partición temporal: entrenamiento jul-2025 → mar-2026 (9 meses), validación abr → jun-2026 (3 meses) y test jul → sep-2026 (3 meses). Validación y test siempre son posteriores al entrenamiento.
 - Los hiperparámetros se eligen con validación; el modelo final se reentrena con entrenamiento + validación (12 meses) y se reporta una sola vez en test.
 - Cada modelo se compara contra su baseline con la misma partición.
-- En P2 el costo es asimétrico: no avisar de una estación que se vacía (usuario sin servicio) cuesta más que una falsa alarma (un viaje de camioneta de más).
+- En P2 las clases de riesgo son pocas (cerca del 1.7 % del test), así que accuracy no sirve para comparar modelos: un modelo que siempre dice "bajo riesgo" tendría accuracy alta y no avisaría de nada. Por eso se evalúa con macro-F1 y con recall y precision de cada clase de riesgo.
 
 ## 6. Fuentes de datos
 - Viajes mensuales del portal de datos abiertos de MiBici, jul-2025 a sep-2026: 15 archivos `datos_abiertos_AAAA_MM.csv` (enlaces en `config.py`), **5,616,821 viajes** después de la limpieza.
@@ -48,15 +48,15 @@ Formato basado en el Machine Learning Canvas de Louis Dorard.
 - No se usan datos externos en esta etapa (clima y días festivos quedan como mejora).
 
 ## 7. Recolección y versionado de datos
-- `dataset.py` descarga los meses y la nomenclatura, normaliza columnas, codificación y fechas, quita duplicados y guarda Parquet en `data/processed/`.
-- Manifiesto versionado en Git con número de registros y hash SHA-256 de cada archivo; MLflow registra como `data_version` el hash del manifiesto.
-- Las columnas de usuario (`usuario_id`, `genero`, `anio_nacimiento`) no se usan en ningún modelo ni se registran en MLflow; se propone no guardarlas en los datos procesados.
+- `dataset.py` descarga los meses y la nomenclatura, normaliza columnas, codificación y fechas, quita duplicados y guarda Parquet en `data/processed/`. Solo lee las columnas que usan los modelos.
+- `manifest.py` genera `data_manifest.json` (versionado en Git) con número de registros y hash SHA-256 de cada archivo; `make data` corre los dos pasos. MLflow registra como `data_version` el hash del manifiesto.
+- Las columnas de usuario (`usuario_id`, `genero`, `anio_nacimiento`) no se leen, no se guardan en los datos procesados y no se registran en MLflow.
 
 ## 8. Variables
-Todas se calculan con información disponible al cierre de la hora en que se hace la predicción (rezagos con `shift` sobre la cuadrícula completa y estadísticas históricas solo del entrenamiento).
+Todas se calculan con información disponible al cierre de la hora anterior a la que se predice (rezagos con `shift` sobre la cuadrícula completa de horas y promedios que solo miran hacia atrás).
 - **Base común:** tabla estación × hora con salidas, llegadas, flujo neto (llegadas − salidas) y capacidad; las horas sin viajes van en 0 y cada estación entra desde su primer viaje.
 - **P1:** hora del día, día de la semana, fin de semana, mes; viajes de la estación hace 1, 2, 24 y 168 horas; promedio de las últimas 24 horas; promedio de la misma hora en las 4 semanas anteriores; capacidad.
-- **P2:** las de P1 aplicadas a salidas, llegadas y flujo neto; flujo neto de las últimas 3 horas relativo a la capacidad; tasa histórica de riesgo de la estación en ese bloque horario (calculada en entrenamiento).
+- **P2 (implementadas en el PR #5):** capacidad; hora del día, día de la semana, fin de semana y mes; salidas de la estación hace 1, 2, 24 y 168 horas; promedio de salidas de las últimas 24 horas y de la misma hora en las 4 semanas anteriores. Se excluyen las estaciones con capacidad 0 (no se puede calcular el flujo relativo). Mejora prevista: agregar los mismos rezagos para llegadas y flujo neto, que deberían ayudar sobre todo a detectar saturación.
 - **P3:** proporción de salidas y de llegadas por hora (24 h) en días entre semana y en fin de semana, y flujo neto promedio relativo a la capacidad. La ubicación no entra al clustering; se usa para el mapa.
 
 ## 9. Construcción de modelos
@@ -66,7 +66,7 @@ Todas se calculan con información disponible al cierre de la hora en que se hac
 
 ## 10. Monitoreo (etapas siguientes)
 - Drift de las variables de entrada con Evidently. Ya se observa un cambio entre jul-2025 y sep-2026 (+33 % de viajes y 101 estaciones más con viajes), así que el monitoreo es necesario desde el inicio.
-- Seguimiento de `test_mae` (P1) y `test_recall` (P2) contra el baseline en cada mes nuevo; si el modelo deja de superarlo, se reentrena.
+- Seguimiento de `test_mae` (P1) y de `test_macro_f1` y el recall de cada clase de riesgo (P2) contra el baseline en cada mes nuevo; si el modelo deja de superarlo, se reentrena.
 
 ---
 
@@ -79,15 +79,20 @@ Todas se calculan con información disponible al cierre de la hora en que se hac
 - **Quién y qué decide:** el operador decide dónde concentrar la flota y qué estaciones priorizar en la siguiente hora.
 
 ### P2 — Riesgo de quedarse sin bicis o sin anclajes
-- **Qué se predice:** al cierre de cada hora *t*, si la estación *s* (capacidad *C*) estará en riesgo durante las siguientes *W* = 3 horas.
-- **Etiqueta:** sea *F(k)* el flujo neto acumulado (llegadas − salidas) de *t* a *t* + *k* horas, *k* = 1…3.
-  - Riesgo de vaciarse si el mínimo de *F(k)* ≤ −0.3·*C*.
-  - Riesgo de llenarse si el máximo de *F(k)* ≥ 0.6·*C*.
-  - *y* = 1 si se cumple cualquiera.
-- **Calibración:** en jul-2025 esta etiqueta deja 7.34 % de estación-horas positivas (6.17 % de vaciarse y 1.18 % de llenarse), un desbalance manejable que no queda ni en ~1 % ni en ~50 %.
-- **Justificación de la aproximación:** sin inventario, una salida neta grande respecto a la capacidad en pocas horas vacía la estación salvo que empezara casi llena o que la rebalanceen; lo mismo con las llegadas netas y el llenado. Se usa el mínimo y el máximo dentro de la ventana, no solo el valor final, para no perder picos intermedios. El umbral de vaciarse es más bajo (más sensible) porque es el caso de mayor costo: el usuario sin bici se queda sin servicio, mientras que el que trae bici puede dejarla en otra estación.
-- **Limitaciones:** se desconoce el inventario inicial y el rebalanceo con camionetas no aparece en los datos, así que la etiqueta mide presión de demanda, no disponibilidad real. Mejora futura: 3 clases (vaciarse / llenarse / normal).
-- **Quién y qué decide:** el equipo de rebalanceo decide a qué estaciones mandar camionetas y en qué orden.
+- **Qué se predice:** al cierre de cada hora, la clase de riesgo de la estación *s* (capacidad *C*) en la hora siguiente *h*, usando solo información de horas anteriores.
+- **Etiqueta** (`crear_etiqueta_p2` en `features.py`): flujo relativo *r* = (llegadas − salidas de la hora *h*) / *C*.
+  - Clase 1, desabasto: *r* < −0.30 (en una hora salen, en neto, más del 30 % de la capacidad).
+  - Clase 2, saturación: *r* > +0.30 (en una hora llegan, en neto, más del 30 % de la capacidad).
+  - Clase 0, bajo riesgo: el resto.
+- **Granularidad y horizonte:** estación × hora; siguiente hora.
+- **Justificación de la aproximación** *(redactada por el equipo a partir del README y el código del PR #5; pendiente de validar por Víctor)*:
+  - Sin inventario, el flujo neto relativo a la capacidad es la mejor señal disponible de presión sobre la estación: perder o ganar en neto casi un tercio de los anclajes en una sola hora deja poco margen, aunque la estación empiece a media capacidad.
+  - Se usa una hora para que P2 tenga la misma granularidad y horizonte que P1: comparte la tabla estación × hora, las variables de `features.py` y la partición, y el resultado llega a tiempo para que el equipo de rebalanceo actúe en la hora siguiente.
+  - El umbral es simétrico porque los dos casos dejan al usuario sin servicio: sin bici para salir o sin anclaje para dejarla. Por la misma razón las dos clases de riesgo tienen el mismo peso al entrenar.
+  - Con este umbral las clases de riesgo son poco frecuentes (7,654 de desabasto y 8,651 de saturación en 961,886 estación-horas del test, cerca del 1.7 %), lo que corresponde a eventos fuera de lo normal y no a la operación de todos los días.
+- **Alternativa considerada:** una etiqueta binaria con ventana de 3 horas (riesgo si el flujo neto acumulado baja de −0.3·*C* o sube de 0.6·*C* en algún momento de las 3 horas siguientes). En jul-2025 dejaba 7.34 % de positivos (6.17 % vaciarse, 1.18 % llenarse). Se descartó a favor de la definición de 3 clases porque separa desabasto de saturación, que piden acciones distintas (llevar o retirar bicis), y mantiene el mismo horizonte que P1. A cambio, la ventana de una hora no capta acumulaciones que se forman en varias horas seguidas; queda como mejora.
+- **Limitaciones:** se desconoce el inventario inicial y el rebalanceo con camionetas no aparece en los datos, así que la etiqueta mide presión de demanda, no disponibilidad real. La capacidad viene de la nomenclatura de sep-2026 y se usa para todo el periodo.
+- **Quién y qué decide:** el equipo de rebalanceo decide a qué estaciones llevar bicis, de cuáles retirarlas y en qué orden.
 
 ### P3 — Grupos de estaciones por patrón de uso
 - **Qué se agrupa:** cada estación con historia suficiente en el periodo de entrenamiento, según su perfil de uso.
@@ -102,10 +107,12 @@ Todas se calculan con información disponible al cierre de la hora en que se hac
 | | Baseline | Candidato(s) | Métricas | Por qué esas métricas |
 |---|---|---|---|---|
 | **P1** | Naive estacional: viajes de la misma estación a la misma hora una semana antes | `HistGradientBoostingRegressor` con `loss="poisson"`; `Ridge` como alternativa lineal | **`test_mae`**, `test_rmse` (y sus versiones `val_`) | MAE queda en viajes por hora y se explica fácil al operador; RMSE castiga los errores grandes, que se concentran en las horas pico. MAPE se descarta porque el 53.1 % de las estación-horas tiene 0 salidas. La pérdida Poisson se usa al entrenar el candidato porque el objetivo es un conteo. |
-| **P2** | Naive estacional: la etiqueta de la misma estación y bloque horario una semana antes | `LogisticRegression(class_weight="balanced")`; `HistGradientBoostingClassifier` | **`test_pr_auc`** (average precision), `test_recall`, `test_precision`, `test_f1` | Con 7.34 % de positivos, accuracy engaña. Recall porque no avisar de una estación por vaciarse es lo más caro; precision para no mandar camionetas de más; PR-AUC resume ambas sin fijar un umbral. |
+| **P2** | Naive estacional: la clase de la misma estación a la misma hora una semana antes (rezago de 168 h de la etiqueta) | `RandomForestClassifier` (50 árboles, `max_depth=12`, `min_samples_leaf=20`, `class_weight={0: 1, 1: 10, 2: 10}`) | **`test_macro_f1`**, **`test_recall_desabasto`**, **`test_recall_saturacion`**, `test_precision_desabasto`, `test_precision_saturacion`; `test_accuracy` solo como referencia | Con cerca de 1.7 % de clases de riesgo, accuracy engaña. Macro-F1 promedia las tres clases con el mismo peso, así que la clase mayoritaria no tapa a las de riesgo. El recall de cada clase de riesgo mide cuántos eventos se detectan (no avisar es lo más caro, porque el usuario se queda sin servicio) y la precision cuántas alertas son reales (cada falsa alarma es un viaje de camioneta de más). Los pesos de clase compensan el desbalance para que el modelo no prediga siempre "bajo riesgo". |
 | **P3** | `KMeans` con *k* elegido por silhouette (*k* = 3…8) | PCA + `KMeans`; `AgglomerativeClustering` (Ward) | **`train_silhouette`**, `train_davies_bouldin`, `test_estabilidad_ari` | Sin etiquetas, se usan métricas internas de separación y compactación. La estabilidad (ARI entre los grupos de entrenamiento y la asignación con perfiles del test) revisa que los grupos no sean ruido de un solo periodo. |
 
 **Resultado del baseline de P1** (run `p1-baseline-semana-anterior`): `val_mae` 0.993, `val_rmse` 2.004, `test_mae` 0.942, `test_rmse` 1.921 viajes por estación-hora. El error se concentra en las horas pico (cerca de 1.8 viajes a las 18 h y 1.4 a las 8 h) y es casi 0 de 1 a 4 h.
+
+**Resultado preliminar del candidato de P2** (de `reports/metrics/metricas_p2.json` en el PR #5; todavía no es un run de MLflow, las cifras finales salen del run): en test, macro-F1 0.46; desabasto con recall 0.30 y precision 0.17; saturación con recall 0.19 y precision 0.20; accuracy 0.97. La accuracy alta con recall bajo en las clases de riesgo confirma que accuracy no sirve como métrica principal en P2. El baseline naive de P2 está pendiente de implementarse y registrarse.
 
 ---
 
@@ -116,6 +123,7 @@ Todas se calculan con información disponible al cierre de la hora en que se hac
 | Rango de 15 meses (jul-2025 → sep-2026), no 18 ni 24 | La estacionalidad anual es débil (con 24 meses, unos 382 mil viajes al mes estables) y lo que domina es la hora y el día de la semana. Además el sistema creció mucho dentro del propio rango (de 367 a 468 estaciones con viajes), así que los datos más viejos representan peor el servicio actual. Con 15 meses el modelo final se entrena con 12 y cada mes del test tiene su equivalente del año anterior. |
 | Partición 9 / 3 / 3 por fecha | Hace falta un periodo de validación para elegir hiperparámetros sin tocar el test. Al ser temporal, el modelo nunca ve información posterior a lo que evalúa. |
 | P1 por hora y no por día | El operador decide hora a hora. Los muchos ceros se manejan con MAE/RMSE en la evaluación y con pérdida Poisson en el candidato. |
-| P2 con ventana de 3 h y no con el flujo del día | En el acumulado diario se cancelan la salida de la mañana y la llegada de la tarde; con 3 h se detectan esos picos y el resultado sirve para rebalancear durante el día. |
+| P2 con 3 clases en la siguiente hora y umbral ±0.30 (definición de Víctor) | Separa desabasto de saturación, que piden acciones distintas, y comparte granularidad, horizonte y variables con P1. Se prefirió sobre la etiqueta binaria con ventana de 3 h, que queda como alternativa considerada (ver formulación de P2). |
+| Baseline de P2 = clase de hace una semana | Es la misma lógica que el baseline de P1: captura el patrón semanal sin entrenar nada, así que cualquier modelo tiene que superarlo para justificar su complejidad. |
 | Cada estación entra desde su primer viaje | Entre jul-2025 y sep-2026 aparecieron 101 estaciones con viajes; llenar con ceros el periodo antes de que existieran sesgaría rezagos y métricas. |
-| Sin datos personales en datos procesados ni en MLflow | Ninguna pregunta usa `usuario_id`, `genero` ni `anio_nacimiento`; quitarlos aplica minimización de datos y cumple la buena práctica de no registrar datos personales. `registrar_run` rechaza parámetros con esos nombres. |
+| Sin datos personales en datos procesados ni en MLflow | Ninguna pregunta usa `usuario_id`, `genero` ni `anio_nacimiento`; no leerlos aplica minimización de datos y cumple la buena práctica de no registrar datos personales. `registrar_run` rechaza parámetros con esos nombres. |

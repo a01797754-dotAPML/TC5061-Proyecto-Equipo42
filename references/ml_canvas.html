@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<style>
+:root{--ink:#1f2933;--mut:#52606d;--line:#cbd2d9;
+--pred:#e8f1fb;--predb:#7aa7d9;--learn:#eaf6ee;--learnb:#79b68b;--eval:#fdf3e2;--evalb:#d9a956;--vp:#f3eefb;--vpb:#9b84c9}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,"DejaVu Sans",sans-serif;color:var(--ink);background:#fff;width:1800px;padding:28px 30px 22px}
+header{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:14px}
+h1{font-size:27px;font-weight:700;letter-spacing:-.2px}
+.sub{font-size:14px;color:var(--mut);margin-top:3px}
+.legend{display:flex;gap:16px;font-size:13px;color:var(--mut)}
+.legend span{display:flex;align-items:center;gap:6px}
+.legend i{width:14px;height:14px;border-radius:3px;display:inline-block;border:1.5px solid}
+.grid{display:grid;grid-template-columns:1fr 1fr 1.15fr 1fr 1fr;grid-template-rows:auto auto auto;gap:10px}
+.box{border:1.5px solid;border-radius:8px;padding:11px 13px 12px}
+.box h2{font-size:15px;font-weight:700;margin-bottom:2px;display:flex;align-items:baseline;gap:7px}
+.box h2 b{font-size:12px;font-weight:600;color:var(--mut)}
+.box .q{font-size:11.5px;color:var(--mut);font-style:italic;margin-bottom:7px}
+.box ul{list-style:none;font-size:13px;line-height:1.38}
+.box li{margin-bottom:5px;padding-left:0}
+.box li .t{display:inline-block;font-weight:700;font-size:11px;border-radius:3px;padding:0 5px;margin-right:5px;color:#fff;background:#52606d}
+.pred{background:var(--pred);border-color:var(--predb)}
+.learn{background:var(--learn);border-color:var(--learnb)}
+.eval{background:var(--eval);border-color:var(--evalb)}
+.vp{background:var(--vp);border-color:var(--vpb);grid-row:1/3;grid-column:3}
+.wide2{grid-column:1/3}
+.evalL{grid-column:1/3}
+.evalR{grid-column:3/6}
+.p1{background:#2f6fb3!important}.p2{background:#b4462f!important}.p3{background:#3d8b5a!important}
+footer{margin-top:10px;font-size:12px;color:var(--mut);display:flex;justify-content:space-between}
+</style></head><body>
+<header>
+ <div><h1>ML Canvas · Proyecto MiBici (Guadalajara)</h1>
+ <div class="sub">Equipo 42 · TC5061 MLOps · Etapa 1 · versión 2 (16 oct 2026) · datos jul-2025 → sep-2026</div></div>
+ <div class="legend"><span><i style="background:var(--pred);border-color:var(--predb)"></i>Predecir</span><span><i style="background:var(--vp);border-color:var(--vpb)"></i>Propuesta de valor</span><span><i style="background:var(--learn);border-color:var(--learnb)"></i>Aprender</span><span><i style="background:var(--eval);border-color:var(--evalb)"></i>Evaluar</span></div>
+</header>
+<div class="grid">
+ <div class="box pred"><h2>Tarea de ML <b>2</b></h2><div class="q">¿Qué se predice y de qué tipo?</div><ul>
+  <li><span class="t p1">P1</span>Regresión: viajes que inician en la estación en la siguiente hora.</li>
+  <li><span class="t p2">P2</span>Clasificación de 3 clases en la siguiente hora: bajo riesgo, desabasto o saturación.</li>
+  <li><span class="t p3">P3</span>Clustering de estaciones por perfil de uso.</li>
+  <li>Granularidad estación × hora (P1, P2) y estación (P3).</li></ul></div>
+ <div class="box pred"><h2>Decisiones <b>3</b></h2><div class="q">¿Qué se decide con la predicción?</div><ul>
+  <li><span class="t p1">P1</span>Dónde concentrar la flota en la siguiente hora.</li>
+  <li><span class="t p2">P2</span>A qué estaciones llevar bicis (desabasto), de cuáles retirarlas (saturación) y en qué orden.</li>
+  <li><span class="t p3">P3</span>Dónde abrir o ampliar estaciones y con qué capacidad.</li></ul></div>
+ <div class="box vp"><h2>Propuesta de valor <b>1</b></h2><div class="q">¿Quién usa el resultado y qué gana?</div><ul>
+  <li><span class="t p1">P1</span><b>Operador del sistema:</b> anticipar la demanda de cada estación una hora antes y planear la flota en lugar de reaccionar a quejas.</li>
+  <li><span class="t p2">P2</span><b>Equipo de rebalanceo:</b> saber qué estaciones se van a quedar sin bicis o sin anclajes y actuar antes de que el usuario se quede sin servicio.</li>
+  <li><span class="t p3">P3</span><b>Planeación urbana:</b> ver qué tipos de estaciones hay (origen matutino, destino laboral, uso de fin de semana) y dónde están, para orientar la expansión.</li>
+  <li style="margin-top:9px">La demanda cambia mucho por hora: picos a las 8 h y de 17 a 19 h entre semana; a mediodía en fin de semana.</li>
+  <li>El sistema crece rápido: de 367 a 468 estaciones con viajes entre jul-2025 y sep-2026 (+33 % de viajes).</li></ul></div>
+ <div class="box learn"><h2>Fuentes de datos <b>6</b></h2><div class="q">¿De dónde salen los datos?</div><ul>
+  <li>Portal de datos abiertos de MiBici: 15 CSV mensuales de viajes, <b>5,616,821 viajes</b> tras limpieza.</li>
+  <li>Nomenclatura de estaciones (sep-2026): <b>484 estaciones</b> con ubicación y capacidad (4 con capacidad 0).</li>
+  <li>Sin datos externos en esta etapa (clima y festivos, mejora futura).</li></ul></div>
+ <div class="box learn"><h2>Recolección y versionado <b>7</b></h2><div class="q">¿Cómo se obtienen y versionan?</div><ul>
+  <li><code>make data</code>: <code>dataset.py</code> descarga, normaliza columnas, codificación y fechas, quita duplicados y guarda Parquet.</li>
+  <li><code>manifest.py</code>: registros + SHA-256 por archivo en <code>data_manifest.json</code> (en Git) → <code>data_version</code> en MLflow.</li>
+  <li>No se leen ni guardan datos personales del usuario.</li></ul></div>
+
+ <div class="box pred wide2"><h2>Cómo se hacen las predicciones <b>4</b></h2><div class="q">¿Cuándo y cómo se usan?</div><ul>
+  <li>Etapa 1: solo evaluación offline con validación y test.</li>
+  <li>Siguientes etapas: P1 y P2 en batch al cierre de cada hora, servidas con FastAPI + Docker; P3 se recalcula cada trimestre y se muestra en un mapa.</li>
+  <li><span class="t p1">P1</span>Salida: viajes esperados por estación para la siguiente hora.</li>
+  <li><span class="t p2">P2</span>Salida: lista de estaciones en riesgo, separada en desabasto y saturación y ordenada por probabilidad, para planear la ruta de las camionetas.</li>
+  <li><span class="t p3">P3</span>Salida: grupo de cada estación y mapa de grupos.</li>
+  <li>Las variables se calculan con las mismas funciones de <code>features.py</code> al entrenar y al predecir, para que no haya diferencias entre ambos.</li></ul></div>
+ <div class="box learn"><h2>Variables <b>8</b></h2><div class="q">¿Qué entra al modelo? (solo información pasada)</div><ul>
+  <li>Base: tabla estación × hora con salidas, llegadas, flujo neto y capacidad; horas sin viajes en 0.</li>
+  <li><span class="t p1">P1</span><span class="t p2">P2</span>Calendario, rezagos de 1, 2, 24 y 168 h, promedio de 24 h y de la misma hora en 4 semanas, capacidad.</li>
+  <li><span class="t p2">P2</span>Etiqueta: flujo neto / capacidad &lt; −0.30 desabasto, &gt; +0.30 saturación.</li>
+  <li><span class="t p3">P3</span>Perfil horario de salidas y llegadas (entre semana y fin de semana) y flujo neto relativo.</li></ul></div>
+ <div class="box learn"><h2>Construcción de modelos <b>9</b></h2><div class="q">¿Qué modelos y cuándo se entrenan?</div><ul>
+  <li><span class="t p1">P1</span>Baseline semana anterior · candidato HistGradientBoosting (Poisson).</li>
+  <li><span class="t p2">P2</span>Baseline clase de hace una semana · candidato RandomForest con pesos de clase.</li>
+  <li><span class="t p3">P3</span>KMeans con <i>k</i> por silhouette · PCA + KMeans, Ward.</li>
+  <li>Todo desde el código y registrado en MLflow (<code>mibici-equipo42</code>). Reentrenamiento mensual o por drift.</li></ul></div>
+
+ <div class="box eval evalL"><h2>Evaluación offline <b>5</b></h2><div class="q">¿Cómo se evalúa antes de usarlo?</div><ul>
+  <li>Partición por fecha 9 / 3 / 3: train jul-2025 → mar-2026, val abr → jun-2026, test jul → sep-2026.</li>
+  <li><span class="t p1">P1</span><code>test_mae</code>, <code>test_rmse</code> · <span class="t p2">P2</span><code>test_macro_f1</code>, recall y precision de desabasto y saturación (accuracy solo de referencia) · <span class="t p3">P3</span>silhouette, Davies-Bouldin, estabilidad ARI.</li></ul></div>
+ <div class="box eval evalR"><h2>Monitoreo en vivo <b>10</b></h2><div class="q">¿Cómo sabemos que sigue funcionando? (etapas siguientes)</div><ul>
+  <li>Drift de las variables de entrada con Evidently: el sistema ya cambió dentro del propio rango (+101 estaciones con viajes), así que se vigila desde el inicio.</li>
+  <li>Cada mes nuevo se compara <code>test_mae</code> (P1) y <code>test_macro_f1</code> y el recall por clase de riesgo (P2) contra su baseline; si el modelo deja de superarlo, se reentrena.</li></ul></div>
+</div>
+<footer><span>Formato basado en el Machine Learning Canvas de Louis Dorard. Detalle y justificación de cada decisión en <code>references/ml_canvas.md</code>.</span><span>Números de recuadro = orden de las secciones del Canvas en el repo</span></footer>
+</body></html>
