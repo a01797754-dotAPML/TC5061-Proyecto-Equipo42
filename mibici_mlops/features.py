@@ -125,3 +125,101 @@ def particion_temporal(tabla: pd.DataFrame, columna: str = "hora") -> pd.DataFra
     tabla.loc[t >= pd.Timestamp(VAL_INICIO), "conjunto"] = "val"
     tabla.loc[t >= pd.Timestamp(TEST_INICIO), "conjunto"] = "test"
     return tabla
+
+def crear_perfil_p3(tabla: pd.DataFrame) -> pd.DataFrame:
+    """Construye el perfil de uso por estación para P3.
+
+    Para cada estación calcula la distribución proporcional de salidas y llegadas
+    por hora del día, separando días entre semana y fines de semana.
+
+    Se generan cuatro perfiles de 24 horas:
+    - salidas entre semana
+    - llegadas entre semana
+    - salidas en fin de semana
+    - llegadas en fin de semana
+
+    También calcula el flujo neto promedio relativo a la capacidad de la estacion.
+
+    Pertinencia para P3:
+    Estas variables describen la forma del patron de uso de cada estacion sin hacer
+    que las estaciones con mayor volumen dominen el clustering. La ubicacion
+    geografica no se incluye como variable del modelo; se utilizara posteriormente
+    para interpretar y visualizar los clusters.
+
+    La funcion debe ejecutarse por separado para train, validacion y test, evitando
+    combinar periodos futuros durante la construccion de los perfiles.
+
+    Requiere las columnas:
+    estacion_id, hora, salidas, llegadas, flujo_neto y capacidad.
+
+    Devuelve una fila por estación.
+    """
+    columnas_requeridas = {
+        "estacion_id",
+        "hora",
+        "salidas",
+        "llegadas",
+        "flujo_neto",
+        "capacidad",
+    }
+
+    faltantes = columnas_requeridas - set(tabla.columns)
+    if faltantes:
+        raise ValueError(
+            f"Faltan columnas requeridas para P3: {sorted(faltantes)}"
+        )
+
+    if tabla["capacidad"].isna().any():
+        raise ValueError("P3 no admite estaciones sin capacidad")
+
+    if (tabla["capacidad"] <= 0).any():
+        raise ValueError("P3 requiere capacidad mayor a 0")
+
+    datos = tabla.copy()
+
+    datos["hora_dia"] = datos["hora"].dt.hour
+    datos["tipo_dia"] = "semana"
+    datos.loc[
+        datos["hora"].dt.dayofweek >= 5,
+        "tipo_dia",
+    ] = "finde"
+
+    estaciones = sorted(datos["estacion_id"].unique())
+    perfil = pd.DataFrame(index=estaciones)
+    perfil.index.name = "estacion_id"
+
+    for tipo_dia in ["semana", "finde"]:
+        mascara = datos["tipo_dia"] == tipo_dia
+
+        for movimiento in ["salidas", "llegadas"]:
+            agregado = (
+                datos.loc[mascara]
+                .groupby(["estacion_id", "hora_dia"])[movimiento]
+                .sum()
+                .unstack(fill_value=0)
+                .reindex(columns=range(24), fill_value=0)
+            )
+
+            total = agregado.sum(axis=1).replace(0, pd.NA)
+
+            proporciones = (
+                agregado.div(total, axis=0)
+                .fillna(0.0)
+            )
+
+            proporciones.columns = [
+                f"{movimiento}_{tipo_dia}_h{hora:02d}"
+                for hora in range(24)
+            ]
+
+            perfil = perfil.join(proporciones, how="left")
+
+    flujo_relativo = (
+        (datos["flujo_neto"] / datos["capacidad"])
+        .groupby(datos["estacion_id"])
+        .mean()
+    )
+
+    perfil["flujo_neto_rel_capacidad"] = flujo_relativo
+
+    return perfil.fillna(0.0).reset_index()
