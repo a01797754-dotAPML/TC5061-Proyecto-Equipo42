@@ -1,0 +1,32 @@
+{
+  "modelo": "RandomForestClassifier",
+  "problema": "P2 - Clasificacion de riesgo de desabasto o saturacion",
+  "tipo_etiqueta": "Proxy heuristica basada en flujo neto horario y capacidad",
+  "periodo_test": "2026-07 a 2026-09",
+  "registros_test": 961886,
+  "parametros": {
+    "n_estimators": 50,
+    "max_depth": 12,
+    "min_samples_leaf": 20,
+    "class_weight": {"0": 1, "1": 10, "2": 10},
+    "random_state": 42
+  },
+  "accuracy": 0.97,
+  "macro_f1": 0.46,
+  "macro_recall": 0.49,
+  "clases": {
+    "bajo_riesgo": {"precision": 0.99, "recall": 0.98, "f1": 0.98, "support": 945581},
+    "desabasto": {"precision": 0.17, "recall": 0.30, "f1": 0.22, "support": 7654},
+    "saturacion": {"precision": 0.20, "recall": 0.19, "f1": 0.19, "support": 8651}
+  },
+  "matriz_confusion": [
+    [928601, 10732, 6248],
+    [5116, 2277, 261],
+    [6693, 351, 1607]
+  ],
+  "limitaciones": [
+    "Las etiquetas son aproximaciones heuristicas, no mediciones reales de disponibilidad.",
+    "El modelo presenta recall limitado para las clases de riesgo.",
+    "Se utiliza un catalogo de capacidades de septiembre de 2026 para todo el periodo."
+  ]
+}
