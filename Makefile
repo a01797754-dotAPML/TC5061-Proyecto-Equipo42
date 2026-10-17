@@ -67,6 +67,11 @@ data: requirements
 	$(PYTHON_INTERPRETER) -m mibici_mlops.dataset
 	$(PYTHON_INTERPRETER) -m mibici_mlops.manifest
 
+## Run baseline experiments (P1, P2, P3) and log them to MLflow
+.PHONY: experiments
+experiments:
+	$(PYTHON_INTERPRETER) -m mibici_mlops.modeling.run_experiments
+	
 #################################################################################
 # Self Documenting Commands                                                     #
 #################################################################################
