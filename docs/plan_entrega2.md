@@ -63,7 +63,7 @@
 
 ## Anexo técnico: contratos para implementar (para quien programe, y para su asistente de IA)
 
-> Fuente de verdad de las convenciones de la entrega 2. Si algo aquí no encaja con tu pregunta, coméntalo en el chat o en un PR antes de implementar otra variante. Los detalles finales se confirman con el PR de piezas compartidas (Carlos C.).
+> Fuente de verdad de las convenciones de la entrega 2. Si algo aquí no encaja con tu pregunta, coméntalo en el chat o en un PR antes de implementar otra variante. Implementado en el PR #14 (piezas compartidas); el ejemplo completo de uso está en `tests/test_mlflow_project.py`.
 
 **Base que no cambia (entrega 1):** misma partición (`VAL_INICIO`, `TEST_INICIO` en `config.py`), mismas métricas y nombres:
 - P1: `val_mae`, `test_mae` (principal), `val_rmse`, `test_rmse`
@@ -72,11 +72,16 @@
 
 Rutas, fechas y semilla siempre desde `config.py`; nunca escritas a mano.
 
-**Ejecución:** todo con el MLflow Project, desde la raíz del repo:
+**Ejecución:** todo con el MLflow Project, desde la raíz del repo (con el servidor levantado y `MLFLOW_TRACKING_URI` exportada, ver abajo):
 ```bash
-mlflow run . -e ingest
-mlflow run . -e train -P question=p1 -P model=hgb -P params='{"max_iter": 300}'
+python -m mlflow run . -e ingest --experiment-name mibici-equipo42
+python -m mlflow run . -e train --experiment-name mibici-equipo42 \
+    -P question=p1 -P model=<modelo> -P params='{"<hiperparametro>": <valor>}'
 ```
+- `--experiment-name mibici-equipo42` es obligatorio: sin él, `mlflow run` registra en el experimento *Default*.
+- `model` es obligatorio (cada pregunta define sus modelos); `params` es un JSON con los hiperparámetros (por defecto `{}`).
+- La primera ejecución tarda unos minutos porque pyenv crea el entorno de `python_env.yaml`; después se reutiliza.
+- Prueba rápida sin MLflow Project: `python -m mibici_mlops.modeling.train --question p1 --model <modelo> --params '{...}'`.
 
 **Interfaz por pregunta:** `mibici_mlops/modeling/pN.py` expone
 ```python
@@ -84,13 +89,35 @@ def train(model: str, params: dict) -> str:  # devuelve el run_id
 ```
 El punto de entrada `train` la llama según `question`. Las funciones `main()` de la entrega 1 (baselines) se conservan.
 
-**Registro en MLflow:** con el helper común de `mibici_mlops/tracking.py` (no llamar `mlflow.log_*` a mano para lo común). El helper:
-- reutiliza el run que crea `mlflow run` (no abre otro);
+**Registro en MLflow:** con el helper común de `mibici_mlops/tracking.py` (no llamar `mlflow.log_*` a mano para lo común):
+```python
+from mibici_mlops.tracking import iniciar_run, registrar_resultados
+
+def train(model: str, params: dict) -> str:
+    ...  # construir tablas y X_train, y_train con features.py
+    with iniciar_run("P1", f"p1-{model}", model_family="hist_gradient_boosting",
+                     stage_of_work="candidate", params={"modelo": model, **params}) as run:
+        estimador.fit(X_train, y_train)
+        ...  # métricas val_/test_ en las mismas filas que el baseline, gráficas en una carpeta temporal
+        registrar_resultados(metricas, modelo=estimador, X_ejemplo=X_train, graficas=[...],
+                             config={...}, datos_entrenamiento=tabla_train_agregada,
+                             nombre_datos="p1-estacion-hora-train")
+    return run.info.run_id
+```
+`iniciar_run`:
+- reutiliza el run que crea `mlflow run` (no abre otro) y le pone el nombre descriptivo;
 - agrega tags obligatorios: `equipo`, `pregunta`/`question` (`P1`/`P2`/`P3`), `git_commit`, `git_cambios_sin_commit`, `model_family` (por ejemplo `hgb`, `rf`, `kmeans`) y `stage_of_work` (`baseline`, `search`, `candidate`);
 - agrega params comunes: fechas, `val_inicio`, `test_inicio`, `data_version`, `seed`;
-- organiza artefactos en subcarpetas: `model/` (con `signature` e `input_example`), `data/` (`data_manifest.json`), `plots/` y `config/` (parámetros de la corrida).
+- valida `stage_of_work` y rechaza parámetros con datos personales.
 
-**Nombres de runs:** `pN-<modelo>-<variante>`, por ejemplo `p1-hgb-poisson`, `p2-rf-hora-t`, `p3-kmeans-sin-escalar`. Búsquedas: run padre `pN-<modelo>-search` (`stage_of_work=search`) con runs hijos `nested=True`, uno por combinación. La selección se hace con métricas de **validación**; test solo para el reporte.
+`registrar_resultados`:
+- registra las métricas (rechaza las que no tengan prefijo `train_`, `val_` o `test_`);
+- organiza artefactos en subcarpetas: `plots/` (gráficas), `config/run_config.json` (configuración) y `data/data_manifest.json` (versión de datos);
+- registra el conjunto de entrenamiento con `mlflow.log_input` (digest = `data_version`);
+- registra el modelo con `signature` e `input_example`. **En MLflow 3 el modelo es un *Logged Model***: aparece en la sección *Logged models* del run (URI `models:/m-...`, guardado en el tag `model_uri`), no como carpeta en *Artifacts*. Ese URI es el que se registra en el Model Registry;
+- MLflow 3 guarda los modelos de scikit-learn con **skops** (no ejecuta código al cargar). Si al guardar sale `UntrustedTypesFoundException`, declarar **solo** el tipo concreto en `tipos_confiables=[...]` (por ejemplo, HistGradientBoosting necesita `"sklearn.ensemble._hist_gradient_boosting.predictor.TreePredictor"`). Devuelve el `model_uri`.
+
+**Nombres de runs:** `pN-<modelo>-<variante>`, por ejemplo `p1-hgb-poisson`, `p2-rf-hora-t`, `p3-kmeans-sin-escalar`. Búsquedas: run padre `pN-<modelo>-search` (`stage_of_work=search`) con runs hijos `iniciar_run(..., nested=True)`, uno por combinación (ver `test_busqueda_con_nested_runs`). La selección se hace con métricas de **validación**; test solo para el reporte.
 
 **Gráficas mínimas (en `plots/`):** P1 real vs. predicho y residuales; P2 matriz de confusión y curva precisión-recall; P3 mapa y perfiles de los grupos.
 
