@@ -30,6 +30,8 @@ Responder con Machine Learning tres preguntas sobre la operación de MiBici y de
 ## Estructura del repositorio
 
 ```
+├── MLproject                <- MLflow Project: puntos de entrada ingest y train
+├── python_env.yaml          <- Entorno del MLflow Project (mismas versiones que requirements.txt)
 ├── Makefile                 <- make requirements | data | experiments | test | lint
 ├── README.md
 ├── data_manifest.json       <- Versión de los datos (registros + SHA-256 por archivo)
@@ -41,16 +43,17 @@ Responder con Machine Learning tres preguntas sobre la operación de MiBici y de
 ├── notebooks/               <- Solo exploración: 1.0-ce-exploracion-mibici.ipynb
 ├── references/              <- ML Canvas (md, png, html) y diagrama de arquitectura (png, dot)
 ├── reports/figures/         <- Figuras generadas por los experimentos (fuera de Git)
-├── tests/                   <- Pruebas de ingesta, features de P3 y modelo P2 (pytest)
+├── tests/                   <- Pruebas de ingesta, features de P3, modelo P2 y registro común / MLflow Project (pytest)
 └── mibici_mlops/            <- Código fuente
     ├── config.py            <- Rutas, fechas, partición, semilla, URLs y MLflow (un solo lugar)
     ├── dataset.py           <- Ingesta: descarga, normalización y Parquet
     ├── manifest.py          <- Genera data_manifest.json
     ├── features.py          <- Tabla estación × hora, calendario, rezagos, etiqueta P2, perfiles P3
-    ├── tracking.py          <- registrar_run(): registro común en MLflow (tags, params, validaciones)
+    ├── tracking.py          <- Registro común en MLflow: registrar_run (baselines), iniciar_run + registrar_resultados (candidatos)
     ├── preparar_p2.py, modelo_p2.py, entrenar_p2.py   <- Preparación, modelo y entrenamiento de P2
     └── modeling/
-        ├── p1.py, p2.py, p3.py      <- main() de cada pregunta (registra su run)
+        ├── p1.py, p2.py, p3.py      <- main() (baseline) y train(model, params) (candidatos, entrega 2)
+        ├── train.py                 <- Punto de entrada train del MLflow Project
         └── run_experiments.py       <- Orquesta P1, P2 y P3 (make experiments)
 ```
 
@@ -93,6 +96,76 @@ python -m mlflow ui --backend-store-uri sqlite:///mlflow.db     # interfaz en ht
 | `p3-pca-kmeans` | silhouette 0.095 · Davies-Bouldin 2.72 · ARI 0.633 |
 
 Pruebas: `make test` (o `python -m pytest tests`).
+
+## MLflow Project (entrega 2)
+
+El repositorio es un **MLflow Project** (`MLproject` en la raíz): la ingesta y el entrenamiento de P1, P2 y P3 se ejecutan con `mlflow run`. El entorno se declara en `python_env.yaml` con las mismas versiones fijas de `requirements.txt`; `mlflow run` lo crea con **pyenv** (`brew install pyenv && pyenv install 3.12.15`).
+
+### 1. Servidor de tracking (requerido por el Model Registry)
+
+En una terminal aparte, desde la raíz del repo:
+
+```bash
+python -m mlflow server --backend-store-uri sqlite:///mlflow.db --port 5000
+```
+
+Y en la terminal de trabajo:
+
+```bash
+export MLFLOW_TRACKING_URI=http://127.0.0.1:5000
+```
+
+`config.py` toma `MLFLOW_TRACKING_URI` de esta variable (si no existe, usa `sqlite:///mlflow.db`). `mlflow.db`, `mlruns/` y `mlartifacts/` están en `.gitignore`. Usar `python -m mlflow` garantiza la versión de MLflow del entorno.
+
+### 2. Ingesta y entrenamiento con `mlflow run`
+
+```bash
+# Ingesta: descarga, normaliza y versiona los datos (dataset.py + manifest.py)
+python -m mlflow run . -e ingest --experiment-name mibici-equipo42
+
+# Entrenamiento de un candidato: pregunta, modelo e hiperparámetros (JSON)
+python -m mlflow run . -e train --experiment-name mibici-equipo42 \
+    -P question=<p1|p2|p3> -P model=<modelo> -P params='{"<hiperparametro>": <valor>}'
+```
+
+| Parámetro | Valores | Por defecto |
+|---|---|---|
+| `question` | `p1`, `p2`, `p3` | `p1` |
+| `model` | Los que implementa cada `modeling/pN.py` | Obligatorio |
+| `params` | Hiperparámetros en JSON | `{}` (valores por defecto del modelo) |
+
+Rutas, fechas, partición y semilla salen de `config.py`; no se pasan por parámetro. Para probar sin MLflow Project: `python -m mibici_mlops.modeling.train --question <p1|p2|p3> --model <modelo>`.
+
+**Contrato por pregunta:** cada `mibici_mlops/modeling/pN.py` expone `train(model: str, params: dict) -> str` (devuelve el `run_id`) y registra la corrida con `tracking.iniciar_run` + `tracking.registrar_resultados`. El ejemplo de uso completo está en `tests/test_mlflow_project.py`.
+
+### 3. Qué registra cada candidato
+
+Cada corrida candidata reutiliza el run que crea `mlflow run` y registra, con el helper común `tracking.iniciar_run` + `tracking.registrar_resultados`:
+
+| Elemento | Dónde |
+|---|---|
+| Etiquetas `equipo`, `question`, `git_commit`, `git_cambios_sin_commit`, `model_family`, `stage_of_work` (`baseline`, `search`, `candidate`) | Tags del run |
+| Fechas de la partición, `data_version`, `seed` e hiperparámetros | Parámetros del run |
+| Métricas `val_*` y `test_*` (las mismas de la entrega 1) y la mejora contra el baseline | Métricas del run |
+| Modelo con firma (`signature`) y ejemplo de entrada | *Logged model* `model`, ligado al run |
+| Manifiesto de datos | `data/data_manifest.json` |
+| Conjunto de entrenamiento **agregado** (estación × hora) | Input del run (`mlflow.log_input`) |
+| Gráficas de desempeño | `plots/` |
+| Configuración de la corrida | `config/run_config.json` |
+
+Las búsquedas de hiperparámetros se organizan como **nested runs**: un run padre (`stage_of_work=search`) y un run hijo por combinación (`iniciar_run(..., nested=True)`).
+
+### 4. Model Registry
+
+Esquema de ciclo de vida: **aliases** (el esquema vigente de MLflow; las etapas *Staging/Production* están obsoletas). `champion` marca la versión en producción y `challenger` la siguiente mejor. Modelos:
+
+| Pregunta | Modelo registrado | Carga en producción |
+|---|---|---|
+| P1 | `mibici-equipo42-p1-demanda` | `models:/mibici-equipo42-p1-demanda@champion` |
+| P2 | `mibici-equipo42-p2-riesgo` | `models:/mibici-equipo42-p2-riesgo@champion` |
+| P3 | `mibici-equipo42-p3-grupos` | `models:/mibici-equipo42-p3-grupos@champion` |
+
+Los comandos para reproducir el modelo elegido de cada pregunta se agregan al cerrar la experimentación.
 
 ## Buenas prácticas aplicadas
 

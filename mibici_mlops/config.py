@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -31,7 +32,9 @@ VAL_INICIO = "2026-04-01"
 TEST_INICIO = "2026-07-01"
 FECHA_FIN = "2026-09-30"
 
-MLFLOW_TRACKING_URI = "sqlite:///mlflow.db"
+# Servidor de tracking (requerido por el Model Registry). Se toma de la variable de entorno,
+# por ejemplo MLFLOW_TRACKING_URI=http://127.0.0.1:5000; si no existe, se usa SQLite local.
+MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "sqlite:///mlflow.db")
 MLFLOW_EXPERIMENT = "mibici-equipo42"
 
 VIAJES_PATH = PROCESSED_DATA_DIR / "viajes"

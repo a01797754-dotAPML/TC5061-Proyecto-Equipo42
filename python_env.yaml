@@ -1,0 +1,6 @@
+# Entorno del MLflow Project: mismas versiones fijas que requirements.txt (requiere pyenv)
+python: "3.12.15"
+build_dependencies:
+  - pip
+dependencies:
+  - -r requirements.txt

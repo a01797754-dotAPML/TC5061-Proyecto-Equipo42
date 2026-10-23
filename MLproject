@@ -1,0 +1,16 @@
+name: mibici-equipo42
+
+python_env: python_env.yaml
+
+entry_points:
+  ingest:
+    # Descarga, normaliza y versiona los datos (dataset.py + manifest.py)
+    command: "python -m mibici_mlops.dataset && python -m mibici_mlops.manifest"
+
+  train:
+    # Rutas, fechas, partición y semilla salen de mibici_mlops/config.py (no se repiten aquí)
+    parameters:
+      question: {type: string, default: p1}
+      model: {type: string}          # obligatorio: cada pregunta define sus modelos
+      params: {type: string, default: "{}"}
+    command: "python -m mibici_mlops.modeling.train --question {question} --model {model} --params {params}"
