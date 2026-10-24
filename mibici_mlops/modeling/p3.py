@@ -5,6 +5,7 @@ Agrupa estaciones segun sus patrones de uso mediante K-Means.
 Uso desde la raíz del repositorio:
     python -m mibici_mlops.modeling.p3
 """
+from time import perf_counter
 
 from loguru import logger
 import matplotlib
@@ -14,7 +15,18 @@ from sklearn.decomposition import PCA
 from sklearn.metrics import adjusted_rand_score, davies_bouldin_score, silhouette_score
 from sklearn.preprocessing import StandardScaler
 
-from mibici_mlops.tracking import registrar_run
+from mibici_mlops.modeling.p3_candidates import crear_candidato_p3
+from mibici_mlops.modeling.p3_plots import generar_graficas_p3
+from mibici_mlops.modeling.p3_search import (
+    ejecutar_busqueda_p3,
+    evaluar_candidato_p3,
+    transformar_para_metricas,
+)
+from mibici_mlops.tracking import (
+    iniciar_run,
+    registrar_resultados,
+    registrar_run,
+)
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -654,7 +666,359 @@ def graficar_mapa_clusters(
     fig.tight_layout()
     fig.savefig(ruta, dpi=140)
     plt.close(fig)
+def preparar_experimento_p3():
+    """Prepara perfiles y matrices de P3 para la Entrega 2."""
+    viajes, estaciones = cargar_datos_p3()
 
+    perfiles = construir_perfiles_p3(
+        viajes,
+        estaciones,
+    )
+
+    columnas = [
+        columna
+        for columna in perfiles["train"].columns
+        if columna != "estacion_id"
+    ]
+
+    X_train = perfiles["train"][columnas].copy()
+    X_val = perfiles["val"][columnas].copy()
+    X_test = perfiles["test"][columnas].copy()
+
+    return {
+        "viajes": viajes,
+        "estaciones": estaciones,
+        "perfiles": perfiles,
+        "columnas": columnas,
+        "X_train": X_train,
+        "X_val": X_val,
+        "X_test": X_test,
+    }
+
+
+def construir_resultado_clusters_p3(
+    perfil: pd.DataFrame,
+    etiquetas,
+) -> pd.DataFrame:
+    """Asocia cada estación con el cluster predicho."""
+    resultado = perfil[["estacion_id"]].copy()
+    resultado["cluster"] = etiquetas
+
+    return resultado
+
+
+def evaluar_pipeline_final_p3(
+    modelo,
+    perfil_final: pd.DataFrame,
+    perfil_test: pd.DataFrame,
+) -> tuple[dict, pd.DataFrame, pd.DataFrame]:
+    """Evalúa separación interna y estabilidad temporal de un pipeline P3."""
+    columnas = [
+        columna
+        for columna in perfil_final.columns
+        if columna != "estacion_id"
+    ]
+
+    X_final = perfil_final[columnas]
+    X_test = perfil_test[columnas]
+
+    etiquetas_final = modelo.predict(X_final)
+    etiquetas_test = modelo.predict(X_test)
+
+    X_final_transformado = transformar_para_metricas(
+        modelo,
+        X_final,
+    )
+
+    metricas = {
+        "train_silhouette": float(
+            silhouette_score(
+                X_final_transformado,
+                etiquetas_final,
+            )
+        ),
+        "train_davies_bouldin": float(
+            davies_bouldin_score(
+                X_final_transformado,
+                etiquetas_final,
+            )
+        ),
+    }
+
+    resultado_final = construir_resultado_clusters_p3(
+        perfil_final,
+        etiquetas_final,
+    )
+
+    resultado_test = construir_resultado_clusters_p3(
+        perfil_test,
+        etiquetas_test,
+    )
+
+    comparables = resultado_final.merge(
+        resultado_test,
+        on="estacion_id",
+        suffixes=("_final", "_test"),
+    )
+
+    metricas["test_estabilidad_ari"] = float(
+        adjusted_rand_score(
+            comparables["cluster_final"],
+            comparables["cluster_test"],
+        )
+    )
+
+    metricas["test_estaciones_comparables"] = float(
+        len(comparables)
+    )
+
+    return (
+        metricas,
+        resultado_final,
+        resultado_test,
+    )
+def train(model: str, params: dict) -> str:
+    """Entrena y registra un experimento P3 mediante el MLflow Project.
+
+    Modelos disponibles:
+    - baseline
+    - kmeans-sin-escalar
+    - kmeans-flujo-escalado
+    - pca-flujo-escalado
+    - kmeans-search
+    """
+    modelos_validos = {
+        "baseline",
+        "kmeans-sin-escalar",
+        "kmeans-flujo-escalado",
+        "pca-flujo-escalado",
+        "kmeans-search",
+    }
+
+    if model not in modelos_validos:
+        raise ValueError(
+            f"Modelo P3 desconocido: {model}. "
+            f"Opciones: {sorted(modelos_validos)}"
+        )
+
+    datos = preparar_experimento_p3()
+
+    viajes = datos["viajes"]
+    estaciones = datos["estaciones"]
+    perfiles = datos["perfiles"]
+    columnas = datos["columnas"]
+
+    X_train = datos["X_train"]
+    X_val = datos["X_val"]
+
+    if model == "baseline":
+        etapa = "baseline"
+        model_family = "kmeans"
+    elif model == "kmeans-search":
+        etapa = "search"
+        model_family = "kmeans"
+    elif model == "pca-flujo-escalado":
+        etapa = "candidate"
+        model_family = "pca_kmeans"
+    else:
+        etapa = "candidate"
+        model_family = "kmeans"
+
+    run_name = f"p3-{model}"
+
+    params_run = {
+        "modelo": model,
+        **params,
+    }
+
+    with iniciar_run(
+        pregunta="P3",
+        run_name=run_name,
+        model_family=model_family,
+        stage_of_work=etapa,
+        params=params_run,
+    ) as run:
+        if model == "kmeans-search":
+            mejor = ejecutar_busqueda_p3(
+                X_train=X_train,
+                X_val=X_val,
+                columnas=columnas,
+            )
+
+            parametros_modelo = mejor["params"]
+
+            metricas_val = mejor["metricas"]
+
+            import mlflow
+
+            mlflow.set_tag(
+                "best_child_run_id",
+                mejor["run_id"],
+            )
+            mlflow.set_tag(
+                "best_candidate",
+                mejor["nombre"],
+            )
+            mlflow.log_params(
+                {
+                    "best_k": parametros_modelo["k"],
+                }
+            )
+
+            nombre_modelo_final = "kmeans-flujo-escalado"
+
+        else:
+            parametros_modelo = params.copy()
+
+            modelo_seleccion = crear_candidato_p3(
+                model,
+                columnas=columnas,
+                params=parametros_modelo,
+            )
+
+            inicio_entrenamiento = perf_counter()
+
+            modelo_seleccion.fit(X_train)
+
+            tiempo_entrenamiento = (
+                perf_counter()
+                - inicio_entrenamiento
+            )
+
+            metricas_val = evaluar_candidato_p3(
+                modelo_seleccion,
+                X_val,
+            )
+
+            metricas_val["train_seconds_selection"] = float(
+                tiempo_entrenamiento
+            )
+
+            nombre_modelo_final = model
+
+        perfil_final = construir_perfil_final_p3(
+            viajes,
+            estaciones,
+        )
+
+        columnas_final = [
+            columna
+            for columna in perfil_final.columns
+            if columna != "estacion_id"
+        ]
+
+        X_final = perfil_final[columnas_final]
+
+        modelo_final = crear_candidato_p3(
+            nombre_modelo_final,
+            columnas=columnas_final,
+            params=parametros_modelo,
+        )
+
+        inicio_final = perf_counter()
+
+        modelo_final.fit(X_final)
+
+        tiempo_final = perf_counter() - inicio_final
+
+        (
+            metricas_finales,
+            resultado_final,
+            _resultado_test,
+        ) = evaluar_pipeline_final_p3(
+            modelo_final,
+            perfil_final,
+            perfiles["test"],
+        )
+
+        inicio_inferencia = perf_counter()
+
+        modelo_final.predict(
+            perfiles["test"][columnas_final]
+        )
+
+        tiempo_inferencia = (
+            perf_counter()
+            - inicio_inferencia
+        )
+
+        n_test = len(perfiles["test"])
+
+        metricas = {
+            **metricas_val,
+            **metricas_finales,
+            "train_seconds_final": float(
+                tiempo_final
+            ),
+            "test_inference_ms_per_station": float(
+                (
+                    tiempo_inferencia
+                    / max(n_test, 1)
+                )
+                * 1000
+            ),
+        }
+
+        graficas = generar_graficas_p3(
+            perfil=perfil_final,
+            resultado=resultado_final,
+            estaciones=estaciones,
+            nombre_modelo=model,
+        )
+
+        configuracion = {
+            "pregunta": "P3",
+            "modelo": model,
+            "model_family": model_family,
+            "stage_of_work": etapa,
+            "parametros_solicitados": params,
+            "parametros_modelo_final": parametros_modelo,
+            "criterio_seleccion": "val_silhouette",
+            "criterio_desempate": "val_davies_bouldin",
+            "test_usado_para_seleccion": False,
+            "n_features": len(columnas_final),
+            "n_estaciones_train": len(
+                perfiles["train"]
+            ),
+            "n_estaciones_val": len(
+                perfiles["val"]
+            ),
+            "n_estaciones_final": len(
+                perfil_final
+            ),
+            "n_estaciones_test": len(
+                perfiles["test"]
+            ),
+            "ubicacion_en_clustering": False,
+        }
+
+        if model == "kmeans-search":
+            configuracion.update(
+                {
+                    "best_child_run_id": mejor[
+                        "run_id"
+                    ],
+                    "mejor_k": parametros_modelo[
+                        "k"
+                    ],
+                }
+            )
+
+        registrar_resultados(
+            metricas=metricas,
+            modelo=modelo_final,
+            X_ejemplo=X_final,
+            graficas=graficas,
+            config=configuracion,
+            datos_entrenamiento=perfil_final,
+            nombre_datos="p3-perfil-estacion-train-val",
+        )
+
+        logger.info(
+            f"P3 {model} métricas: {metricas}"
+        )
+
+        return run.info.run_id
 def main(run_name: str = RUN_NAME) -> str:
     """Ejecuta y registra en MLflow el baseline completo de P3."""
 
