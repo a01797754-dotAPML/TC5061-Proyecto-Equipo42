@@ -180,6 +180,7 @@ done
 for m in baseline rf-ajustado-1 rf-ajustado-2 rf-ajustado-3 rf-search; do
   python -m mlflow run . -e train --experiment-name mibici-equipo42 -P question=p2 -P model=$m
 done
+python -m mibici_mlops.modeling.p2_test   # evalúa en test el ganador de p2-rf-search (sin reentrenar)
 for m in baseline kmeans-sin-escalar kmeans-flujo-escalado pca-flujo-escalado kmeans-search; do
   python -m mlflow run . -e train --experiment-name mibici-equipo42 -P question=p3 -P model=$m
 done

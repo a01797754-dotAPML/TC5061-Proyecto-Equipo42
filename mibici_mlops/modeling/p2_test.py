@@ -1,10 +1,31 @@
-"""Evaluación final reproducible del modelo ganador P2."""
+"""Evaluación final reproducible del modelo ganador P2.
+
+Uso: python -m mibici_mlops.modeling.p2_test [run_id]
+Sin run_id evalúa la última búsqueda p2-rf-search terminada del experimento del equipo.
+"""
+
+import sys
 
 import mlflow
 from mlflow import MlflowClient
 
 from mibici_mlops.entrenar_p2 import evaluar_predicciones
 from mibici_mlops.modeling.p2_cache import cargar_o_preparar_p2
+from mibici_mlops.tracking import MLFLOW_EXPERIMENT, MLFLOW_TRACKING_URI
+
+
+def ultimo_run_busqueda_p2() -> str:
+    """run_id de la última búsqueda p2-rf-search terminada (el ganador por validación)."""
+    runs = mlflow.search_runs(
+        experiment_names=[MLFLOW_EXPERIMENT],
+        filter_string="tags.mlflow.runName = 'p2-rf-search' and attributes.status = 'FINISHED'",
+        order_by=["attributes.start_time DESC"],
+        max_results=1,
+        output_format="list",
+    )
+    if not runs:
+        raise ValueError("No hay una búsqueda p2-rf-search terminada: correr model=rf-search antes")
+    return runs[0].info.run_id
 
 
 def evaluar_test_p2(run_id: str) -> dict:
@@ -40,4 +61,5 @@ def evaluar_test_p2(run_id: str) -> dict:
 
 
 if __name__ == "__main__":
-    evaluar_test_p2("754834f5c4294e7eac70e73b6406772d")
+    mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+    evaluar_test_p2(sys.argv[1] if len(sys.argv) > 1 else ultimo_run_busqueda_p2())
