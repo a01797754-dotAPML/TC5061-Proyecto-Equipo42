@@ -26,11 +26,11 @@ def train(model: str, params: dict) -> str:
     import mlflow
 
     from mibici_mlops.modeling.p2_candidates import crear_candidato_p2
+    from mibici_mlops.modeling.p2_plots import registrar_graficas_p2
     from mibici_mlops.modeling.p2_search import (
         ejecutar_busqueda_p2,
         evaluar_candidato_p2,
     )
-    from mibici_mlops.modeling.p2_plots import registrar_graficas_p2
     from mibici_mlops.tracking import iniciar_run, registrar_resultados
 
     if model == "baseline":
@@ -49,7 +49,7 @@ def train(model: str, params: dict) -> str:
     ) as run:
         print(f"Preparando experimento P2: {model}", flush=True)
 
-        X_train, y_train, X_val, y_val, X_test, y_test = (
+        X_train, y_train, X_val, y_val, _X_test, _y_test = (
             preparar_experimento_p2()
         )
 
@@ -100,6 +100,8 @@ def train(model: str, params: dict) -> str:
             modelo=candidato,
             X_ejemplo=X_train,
             config=configuracion,
+            datos_entrenamiento=X_train.assign(riesgo=y_train.to_numpy()),
+            nombre_datos="p2-estacion-hora-train",
             tipos_confiables=["sklearn.tree._tree.Tree"],
         )
 

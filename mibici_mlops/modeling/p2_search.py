@@ -2,7 +2,6 @@
 
 from itertools import product
 
-
 ESPACIO_BUSQUEDA_P2 = {
     "n_estimators": [50, 100],
     "max_depth": [12, 16],
