@@ -4,7 +4,6 @@ from sklearn.ensemble import RandomForestClassifier
 
 from mibici_mlops.config import SEED
 
-
 CANDIDATOS_P2 = {
     "rf-ajustado-1": {
         "n_estimators": 100,

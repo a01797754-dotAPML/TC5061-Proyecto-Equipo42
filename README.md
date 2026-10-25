@@ -165,7 +165,31 @@ Esquema de ciclo de vida: **aliases** (el esquema vigente de MLflow; las etapas 
 | P2 | `mibici-equipo42-p2-riesgo` | `models:/mibici-equipo42-p2-riesgo@champion` |
 | P3 | `mibici-equipo42-p3-grupos` | `models:/mibici-equipo42-p3-grupos@champion` |
 
-Los comandos para reproducir el modelo elegido de cada pregunta se agregan al cerrar la experimentación.
+Al registrar cada versión se copian `git_commit` y `data_version` del run como tags de la versión, para que el linaje se vea en la página del modelo.
+
+### 5. Reproducir la experimentación completa (corrida oficial)
+
+Con el servidor de tracking arriba y `MLFLOW_TRACKING_URI` apuntando a él, desde un clon limpio. El **orden importa** en P1: `hgb-final` toma la mejor combinación de la última `p1-hgb-search`.
+
+```bash
+python -m mlflow run . -e ingest --experiment-name mibici-equipo42
+
+for m in baseline ridge hgb hgb-squared hgb-search hgb-final; do
+  python -m mlflow run . -e train --experiment-name mibici-equipo42 -P question=p1 -P model=$m
+done
+for m in baseline rf-ajustado-1 rf-ajustado-2 rf-ajustado-3 rf-search; do
+  python -m mlflow run . -e train --experiment-name mibici-equipo42 -P question=p2 -P model=$m
+done
+for m in baseline kmeans-sin-escalar kmeans-flujo-escalado pca-flujo-escalado kmeans-search; do
+  python -m mlflow run . -e train --experiment-name mibici-equipo42 -P question=p3 -P model=$m
+done
+```
+
+Ninguna corrida necesita `params`: los valores por defecto y las mallas de búsqueda están en cada `modeling/pN*.py`.
+
+**Windows:** `mlflow run` escapa dos veces las comillas al pasar el comando a `cmd`, así que cualquier `-P params` con JSON falla (`Invalid \escape`). Usar `--env-manager local` y los comandos sin `params`.
+
+**Cachés:** P1 (`data/interim`) y P2 (`data/processed/p2_cache`) guardan sus tablas ligadas al `data_version`. Si cambia el código de features sin cambiar los datos, borrar la caché antes de correr.
 
 ## Buenas prácticas aplicadas
 
