@@ -1,13 +1,11 @@
 """Caché local de particiones para experimentos P2."""
 
 import json
-from pathlib import Path
 
 import pandas as pd
 
 from mibici_mlops.config import PROJ_ROOT
 from mibici_mlops.tracking import obtener_data_version
-
 
 CACHE_DIR = PROJ_ROOT / "data" / "processed" / "p2_cache"
 
@@ -49,8 +47,8 @@ def cargar_o_preparar_p2():
 
     print(f"Preparando caché P2: {version}")
 
-    from mibici_mlops.preparar_p2 import generar_dataset_p2
     from mibici_mlops.modelo_p2 import preparar_datos_modelo
+    from mibici_mlops.preparar_p2 import generar_dataset_p2
 
     tabla = generar_dataset_p2()
     partes = preparar_datos_modelo(tabla)
