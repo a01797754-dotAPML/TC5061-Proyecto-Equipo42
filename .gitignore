@@ -236,3 +236,14 @@ models/*
 # Salidas de los experimentos (se registran como artefactos en MLflow)
 reports/figures/*.png
 reports/metrics/
+
+# ==========================================
+# Security: credentials and temporary backups
+# ==========================================
+
+*.bak
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json

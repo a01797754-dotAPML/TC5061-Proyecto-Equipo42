@@ -215,6 +215,81 @@ Ninguna corrida necesita `params`: los valores por defecto y las mallas de búsq
 4. Antes de pedir revisión se trae `main` a la rama y se resuelven conflictos en la rama, no en `main`.
 5. Se hace `git status` antes de cada `git add` para no subir datos, modelos ni `mlflow.db`.
 
+## Validaciones de seguridad (Actividad 3)
+
+Se realizó una revisión de seguridad del proyecto MiBici – Equipo 42, incluyendo análisis estático del código, auditoría de dependencias, protección de archivos sensibles y pruebas de regresión.
+
+### 1. Análisis estático con Bandit
+
+Comando ejecutado:
+
+`python -m bandit -r mibici_mlops -f txt`
+
+**Resultados:**
+- 11 hallazgos de severidad baja.
+- 0 hallazgos de severidad media.
+- 0 hallazgos de severidad alta.
+
+Los hallazgos corresponden al uso de `subprocess` en `dataset.py` y `tracking.py`. Se verificó que las llamadas utilizan listas de argumentos sin `shell=True`. Se mantienen como observaciones de baja severidad, principalmente relacionadas con la ejecución de comandos externos y la resolución de ejecutables.
+
+### 2. Auditoría de dependencias con pip-audit
+
+Comando ejecutado:
+
+`python -m pip_audit -r requirements.txt --no-deps`
+
+**Hallazgo inicial:**
+- Dependencia afectada: `mlflow==3.17.1`.
+- Vulnerabilidad identificada: **CVE-2026-53995**.
+- Versión corregida: `mlflow==3.17.2`.
+
+**Acción correctiva:** se actualizó MLflow a la versión 3.17.2 en `requirements.txt` y en el entorno virtual del proyecto.
+
+**Resultado posterior:** `No known vulnerabilities found`.
+
+La configuración documentada utiliza SQLite (`sqlite:///mlflow.db`) como backend de tracking. La actualización se realizó para corregir la dependencia afectada, independientemente de la exposición específica del backend FileStore.
+
+**Limitaciones:** la opción `--no-deps` revisa las dependencias directas auditables, pero no sus dependencias transitivas. El paquete local `mibici-mlops (0.0.1)` fue omitido porque no está disponible en PyPI.
+
+### 3. Protección de credenciales y archivos sensibles
+
+Se verificaron los nombres de los archivos rastreados por Git y se buscaron términos asociados con credenciales en archivos de código y configuración, sin encontrar coincidencias en las comprobaciones realizadas.
+
+Se reforzó `.gitignore` con las siguientes reglas:
+
+- `*.bak`
+- `*.pem`
+- `*.key`
+- `*.p12`
+- `*.pfx`
+- `credentials.json`
+
+Estas reglas complementan las exclusiones existentes para `.env`, datos locales, modelos y artefactos de MLflow.
+
+Se verificó su funcionamiento mediante `git check-ignore -v`.
+
+Las exclusiones reducen el riesgo de incorporar información sensible accidentalmente, pero no sustituyen una revisión completa de secretos ni eliminan archivos previamente rastreados.
+
+### 4. Pruebas de regresión con PyTest
+
+Comando ejecutado:
+
+`python -m pytest -q`
+
+**Resultados:**
+- 47 pruebas aprobadas.
+- 0 pruebas fallidas.
+- 9 advertencias.
+- Tiempo de ejecución: 32.22 segundos.
+
+Las pruebas finalizaron correctamente después de actualizar MLflow a la versión 3.17.2.
+
+### 5. Conclusión
+
+La revisión permitió identificar y corregir una dependencia con una vulnerabilidad conocida, reforzar la exclusión de archivos potencialmente sensibles y comprobar que los cambios no introdujeron fallos en las pruebas automatizadas existentes.
+
+Los hallazgos de baja severidad de Bandit permanecen documentados para futuras revisiones. Las auditorías realizadas representan controles preventivos y no garantizan la ausencia total de vulnerabilidades.
+
 ## Integrantes y roles
 
 | Integrante | Matrícula | Rol |
