@@ -290,6 +290,97 @@ La revisión permitió identificar y corregir una dependencia con una vulnerabil
 
 Los hallazgos de baja severidad de Bandit permanecen documentados para futuras revisiones. Las auditorías realizadas representan controles preventivos y no garantizan la ausencia total de vulnerabilidades.
 
+## Validación de datos con DeepChecks
+
+`mibici_mlops/validacion.py` revisa la integridad de los datos procesados y el drift entre train y test de P1 con [DeepChecks](https://docs.deepchecks.com/stable/), y además cuenta reglas de negocio sobre todos los viajes.
+
+### Entorno aparte
+
+DeepChecks 0.19.1 (la última versión, dic-2024) no es compatible con numpy 2 ni con scikit-learn 1.8+, que usa el proyecto. Por eso corre en su propio entorno con `requirements-deepchecks.txt`; **no se instala en el entorno principal** ni se agrega a `requirements.txt`, porque bajaría numpy y scikit-learn y rompería P1-P3.
+
+```bash
+conda create -n mibici-dc python=3.12 -y
+conda activate mibici-dc
+pip install -r requirements-deepchecks.txt
+```
+
+### Auditoría del entorno de DeepChecks
+
+`pip-audit -r requirements-deepchecks.txt` (desde un entorno aparte con pip-audit, para no alterar `mibici-dc`):
+
+| Paquete | Vulnerabilidad | Corregida en | Acción |
+|---|---|---|---|
+| pyarrow 19.0.1 | PYSEC-2026-113 | 23.0.1 | **Actualizado a 23.0.1**; DeepChecks y `tests/test_validacion.py` dan los mismos resultados |
+| setuptools 80.10.2 | PYSEC-2026-3447, GHSA-xmj3-9gf7-h52w | 83.0.0 / 84.1.0 | **Riesgo aceptado**: DeepChecks importa `pkg_resources`, que se eliminó en setuptools 81 |
+
+![pip-audit del entorno de DeepChecks tras actualizar pyarrow](docs/evidencias/pip_audit_deepchecks.png)
+
+Por qué se acepta el riesgo de setuptools: el entorno solo corre en local para validar datos ya descargados, no se despliega ni instala paquetes de terceros durante la validación, y está separado del entorno de entrenamiento. Se revisará si DeepChecks publica una versión compatible con numpy 2. La advertencia `DeprecationWarning` de `quantile` que aparece en las pruebas viene de DeepChecks, por la misma razón.
+
+### Ejecución
+
+Requiere los datos de `make data` y la tabla de P1 (`data/interim/p1_tabla.parquet`, se genera al entrenar P1).
+
+```bash
+conda activate mibici-dc
+make deepchecks          # valida y corre tests/test_validacion.py
+# o por partes:
+python -m mibici_mlops.validacion --solo integridad
+python -m mibici_mlops.validacion --solo drift
+```
+
+Los reportes se guardan en `reports/deepchecks/` (ignorada en Git porque cada HTML pesa entre 10 y 50 MB): `integridad_viajes.html`, `integridad_estaciones.html`, `integridad_p1_train.html`, `drift_p1.html` y `resumen.json`. En el entorno principal, `tests/test_validacion.py` se salta solo (`pytest.importorskip`).
+
+| Datos | Suite | Configuración |
+|---|---|---|
+| `data/processed/viajes/*.parquet` (5.6 M viajes) | `data_integrity` + `PercentOfNulls` (≤ 5%) | muestra de 200 mil con `SEED`, `datetime_name="inicio_viaje"`, `index_name="viaje_id"` |
+| `data/processed/estaciones.parquet` (484) | `data_integrity` + `PercentOfNulls` | completa, `index_name="estacion_id"` |
+| `p1_tabla.parquet`, conjunto train | `data_integrity` + `PercentOfNulls` | `label="salidas"`, `cat_features=["estacion_id"]`, `datetime_name="hora"` |
+| `p1_tabla.parquet`, train vs test | `train_test_validation` | igual que la anterior, muestra de 200 mil por conjunto |
+
+### Hallazgos
+
+**Integridad de viajes y estaciones: aprobada.** Sin nulos, sin `viaje_id` ni filas duplicadas, sin tipos mezclados ni columnas constantes.
+
+**Reglas de negocio** (sobre todos los datos, sin muestra):
+
+| Regla | Resultado | Lectura |
+|---|---|---|
+| Viajes con duración ≤ 0 min | 4,547 (0.08%) | Viajes cancelados o mal registrados. P1-P3 cuentan salidas, no duración, así que no afectan; se documentan. |
+| Viajes de más de 24 h | 15 | Probables bicicletas no devueltas a tiempo; valores atípicos. |
+| Viajes con origen / destino fuera del catálogo | 1,960 / 2,123 | Estaciones dadas de baja que ya no vienen en `nomenclatura_2026_09.csv`. Por eso P1 tiene nulos en `capacidad`. |
+| Estaciones con capacidad 0 | 4 | Estaciones en alta o fuera de servicio. |
+
+**Integridad de la tabla de P1 (train): 2 condiciones no aprobadas.**
+- *PercentOfNulls*: `salidas_media_4sem` tiene nulos en las primeras 4 semanas de cada estación (no hay historia) y `capacidad` en las estaciones fuera del catálogo. Es esperado; el modelo los trata (HGB los maneja de forma nativa y Ridge imputa la mediana).
+- *Feature-Feature Correlation*: los rezagos y promedios de `salidas` están correlacionados entre sí, porque se calculan de la misma serie. No es un error, pero explica por qué Ridge necesita regularización.
+
+**Drift train vs test de P1: 3 condiciones no aprobadas.**
+- *New Category Train Test*: **102 estaciones del test no existen en train** (18.92% de las muestras de test). El sistema creció de 369 estaciones (train) a 413 (val) y 471 (test). Es el hallazgo principal. El modelo de P1 no usa `estacion_id` como variable (predice a partir de rezagos, promedios, calendario y capacidad), así que puede predecir estaciones nuevas; pero su historia es corta, y hasta tener 4 semanas de datos `salidas_media_4sem` queda vacía. En DeepChecks se declara `estacion_id` como categórica solo para detectar este cambio.
+- *Feature Drift*: solo `mes` (KS = 0.34) rebasa el umbral; es consecuencia directa de la partición temporal (train jul→mar, test jul→sep) y no un cambio en los datos. El resto de las variables tiene KS ≤ 0.07.
+- *Multivariate Drift*: el clasificador de dominio separa train y test con AUC 0.84, y la única variable importante es `mes`; confirma lo anterior.
+- *Label Drift: aprobado* (KS = 0.034). La media de salidas por estación-hora baja de 1.37 (train) a 1.26 (test), en parte porque las estaciones nuevas tienen menos uso.
+
+**Fuga de información: aprobada.** Sin traslape ni duplicados de fechas entre train y test (*Date Train-Test Leakage*).
+
+### Evidencia de ejecución
+
+`make deepchecks`: resumen de las suites, reglas de negocio y las 7 pruebas de `tests/test_validacion.py`.
+
+![Salida de make deepchecks](docs/evidencias/deepchecks_make.png)
+
+Resumen de condiciones del reporte `drift_p1.html`:
+
+![Conditions Summary del drift train/test de P1](docs/evidencias/drift_conditions_summary.png)
+
+*New Category Train Test*: 102 estaciones nuevas, el 18.92% de las muestras de test.
+
+![Estaciones nuevas en test](docs/evidencias/drift_new_category.png)
+
+*Feature Drift*: `mes` es la única variable sobre el umbral; test solo contiene julio a septiembre.
+
+![Feature Drift por variable](docs/evidencias/drift_feature_drift.png)
+
 ## Integrantes y roles
 
 | Integrante | Matrícula | Rol |

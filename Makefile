@@ -67,6 +67,12 @@ data: requirements
 	$(PYTHON_INTERPRETER) -m mibici_mlops.dataset
 	$(PYTHON_INTERPRETER) -m mibici_mlops.manifest
 
+## Validate data with DeepChecks (run inside the mibici-dc environment)
+.PHONY: deepchecks
+deepchecks:
+	$(PYTHON_INTERPRETER) -m mibici_mlops.validacion
+	$(PYTHON_INTERPRETER) -m pytest tests/test_validacion.py
+
 ## Run baseline experiments (P1, P2, P3) and log them to MLflow
 .PHONY: experiments
 experiments:
