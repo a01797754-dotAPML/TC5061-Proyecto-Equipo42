@@ -1,0 +1,10 @@
+deepchecks==0.19.1
+numpy==1.26.4
+pandas==2.3.3
+scikit-learn==1.7.2
+setuptools==80.10.2
+pyarrow==23.0.1
+loguru==0.7.3
+python-dotenv==1.2.4
+tqdm==4.70.1
+pytest==9.1.1
