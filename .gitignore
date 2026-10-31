@@ -236,6 +236,7 @@ models/*
 # Salidas de los experimentos (se registran como artefactos en MLflow)
 reports/figures/*.png
 reports/metrics/
+reports/deepchecks/
 
 # ==========================================
 # Security: credentials and temporary backups
