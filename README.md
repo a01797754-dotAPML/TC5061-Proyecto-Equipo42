@@ -404,3 +404,108 @@ Resumen de condiciones del reporte `drift_p1.html`:
 | Víctor Manuel Martínez Zarate | A01840404 | Ingesta reproducible (`dataset.py`, `manifest.py`) y versionado SHA-256; P2: etiqueta de riesgo, variables (incluidas tasas históricas), baseline, Random Forest y su registro en MLflow; pruebas automatizadas de ingesta y P2; propuesta del runner por pregunta (`--pregunta`) integrado en `run_experiments` |
 | Andrea Paola Martínez López | A01797754 | Repositorio con Cookiecutter Data Science, `.gitignore` y GitHub Flow; P3: perfiles de uso, KMeans y candidato PCA + KMeans |
 | Carlos David Martínez Calva | A01056864 | `run_experiments` y `make experiments`, corrida oficial desde un clon limpio y evidencia de MLflow; revisión de PRs; integración del documento de la propuesta y README |
+
+
+## Ejecución completa de pruebas y chequeos — Actividad 7
+
+Para facilitar la reproducción de las validaciones de la actividad se agregó un comando único para Windows que coordina las pruebas automatizadas, la validación de datos con DeepChecks y los chequeos de seguridad.
+
+Debido a incompatibilidades entre dependencias, las validaciones se ejecutan en tres entornos Conda independientes:
+
+| Entorno | Propósito |
+|---|---|
+| `mibici-mlops` | Pruebas generales con PyTest y preparación de la tabla de P1 |
+| `mibici-dc` | Validación de integridad y drift con DeepChecks |
+| `auditoria` | Análisis de seguridad con Bandit y pip-audit |
+
+El script no mezcla las dependencias entre ambientes. Utiliza `conda run` para ejecutar cada herramienta en el entorno correspondiente.
+
+### Preparación de los entornos
+
+El entorno principal debe contener las dependencias del proyecto:
+
+```powershell
+conda create -n mibici-mlops python=3.12 -y
+conda run -n mibici-mlops python -m pip install -r requirements.txt
+```
+
+DeepChecks utiliza un entorno separado:
+
+```powershell
+conda create -n mibici-dc python=3.12 -y
+conda run -n mibici-dc python -m pip install -r requirements-deepchecks.txt
+```
+
+Las herramientas de seguridad se ejecutan en el entorno `auditoria`:
+
+```powershell
+conda create -n auditoria python=3.12 -y
+conda run -n auditoria python -m pip install bandit==1.9.4 pip-audit==2.10.1
+```
+
+### Comando único
+
+Desde la raíz del repositorio se ejecuta:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\actividad7.ps1
+```
+
+El script ejecuta secuencialmente:
+
+1. PyTest en el entorno `mibici-mlops`.
+2. Preparación o reutilización de `data/interim/p1_tabla.parquet`.
+3. Validación de integridad y drift con DeepChecks y sus pruebas automatizadas.
+4. Análisis estático con Bandit.
+5. Auditoría de dependencias con pip-audit para el proyecto principal y el entorno de DeepChecks.
+
+Si alguno de los pasos devuelve un código de error, la ejecución se detiene. Cuando todos los chequeos terminan correctamente se muestra:
+
+```text
+ACTIVIDAD 7: TODOS LOS CHEQUEOS TERMINARON CORRECTAMENTE
+```
+
+### Resultados obtenidos
+
+La ejecución realizada el 1 de noviembre de 2026 produjo los siguientes resultados:
+
+| Validación | Resultado |
+|---|---|
+| PyTest general | 47 pruebas aprobadas, 1 omitida y 9 advertencias |
+| DeepChecks | Validación de integridad y drift ejecutada correctamente |
+| Pruebas de DeepChecks | 7 pruebas aprobadas y 1 advertencia interna de DeepChecks |
+| Bandit | Sin hallazgos de severidad media o alta |
+| pip-audit — proyecto principal | Sin vulnerabilidades conocidas |
+| pip-audit — entorno DeepChecks | Sin vulnerabilidades no aceptadas; las excepciones documentadas de `setuptools` se ignoran explícitamente |
+
+La prueba omitida en el entorno principal corresponde a la validación con DeepChecks, ya que ésta se ejecuta de forma independiente en `mibici-dc`.
+
+Los hallazgos detectados por DeepChecks, como valores faltantes esperados, correlación entre features, nuevas estaciones en test y drift temporal, se documentan en la sección de validación de datos del README y no representan fallos en la ejecución de la herramienta.
+
+### Evidencias
+
+**PyTest — ejecución del conjunto general de pruebas:**
+
+![Ejecución de PyTest](docs/evidencias/pytest_actividad7.png)
+
+**DeepChecks — ejecución de validaciones y pruebas:**
+
+![Ejecución de DeepChecks](docs/evidencias/deepchecks_make.png)
+
+**Resumen de condiciones de drift:**
+
+![Resumen de drift](docs/evidencias/drift_conditions_summary.png)
+
+**Nuevas categorías detectadas entre train y test:**
+
+![Nuevas categorías](docs/evidencias/drift_new_category.png)
+
+**Feature drift detectado:**
+
+![Feature drift](docs/evidencias/drift_feature_drift.png)
+
+**Ejecución completa mediante el comando único:**
+
+![Comando único de la Actividad 7](docs/evidencias/actividad7_comando_unico.png)
+
+De esta forma, las pruebas y los chequeos de calidad y seguridad pueden reproducirse desde un único punto de entrada, manteniendo separados los entornos que requieren versiones de dependencias diferentes.
