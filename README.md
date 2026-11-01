@@ -284,6 +284,21 @@ Comando ejecutado:
 
 Las pruebas finalizaron correctamente después de actualizar MLflow a la versión 3.17.2.
 
+### Evidencias de ejecución (Actividad 3)
+
+Las siguientes evidencias se generaron el 30 de octubre de 2026,
+utilizando Python 3.12.10 en un entorno virtual local.
+
+| Herramienta | Resultado | Evidencia |
+|---|---|---|
+| Bandit 1.9.4 | 11 hallazgos bajos, 0 medios y 0 altos | [Ver resultado](docs/security/bandit.txt) |
+| pip-audit 2.10.1 | Sin vulnerabilidades conocidas en las dependencias auditadas | [Ver resultado](docs/security/pip-audit.txt) |
+| PyTest 9.1.1 | 47 pruebas aprobadas, 9 advertencias | [Ver resultado](docs/security/pytest.txt) |
+
+Los archivos contienen las salidas de las herramientas.
+La auditoría con pip-audit se ejecutó con `--no-deps`, por lo que
+no incluye dependencias transitivas.
+
 ### 5. Conclusión
 
 La revisión permitió identificar y corregir una dependencia con una vulnerabilidad conocida, reforzar la exclusión de archivos potencialmente sensibles y comprobar que los cambios no introdujeron fallos en las pruebas automatizadas existentes.
