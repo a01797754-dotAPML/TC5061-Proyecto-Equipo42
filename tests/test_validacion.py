@@ -9,7 +9,7 @@ import pytest
 pytest.importorskip("deepchecks")
 
 from deepchecks.tabular import Dataset
-from deepchecks.tabular.checks import DataDuplicates
+from deepchecks.tabular.checks import DataDuplicates, NewCategoryTrainTest
 
 from mibici_mlops import validacion
 
@@ -85,5 +85,7 @@ def test_drift_detecta_categoria_nueva_en_test():
         }
     )
     train, test = validacion.datasets_p1(tabla)
-    assert set(train.data["estacion_id"]) == {1, 2}
-    assert 3 in set(test.data["estacion_id"])
+    check = NewCategoryTrainTest().add_condition_new_category_ratio_less_or_equal(0)
+    resultado = check.run(train, test)
+    assert not resultado.passed_conditions()
+    assert resultado.value.loc["estacion_id", "# New Categories"] == 1
