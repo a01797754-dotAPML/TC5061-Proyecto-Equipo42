@@ -305,6 +305,18 @@ La revisión permitió identificar y corregir una dependencia con una vulnerabil
 
 Los hallazgos de baja severidad de Bandit permanecen documentados para futuras revisiones. Las auditorías realizadas representan controles preventivos y no garantizan la ausencia total de vulnerabilidades.
 
+### Reproducir con `make security`
+
+Las herramientas van en su propio entorno, con versiones fijas en `requirements-security.txt`, para no alterar las dependencias del proyecto.
+
+```bash
+conda create -n auditoria python=3.12 -y
+conda activate auditoria
+pip install -r requirements-security.txt
+make security
+```
+
+El comando falla si Bandit encuentra hallazgos de severidad media o alta, o si pip-audit encuentra vulnerabilidades, incluidas las de dependencias transitivas. Solo se ignoran las dos de setuptools en `requirements-deepchecks.txt`, documentadas como riesgo aceptado en la auditoría del entorno de DeepChecks.
 ## Pruebas unitarias de P1 y reproducibilidad del entrenamiento
 
 `tests/test_features_p1.py` prueba las funciones de `mibici_mlops/features.py` que usa P1, con casos normales y casos límite, y verifica que el entrenamiento sea reproducible.
@@ -394,14 +406,14 @@ Los reportes se guardan en `reports/deepchecks/` (ignorada en Git porque cada HT
 | Estaciones con capacidad 0 | 4 | Estaciones en alta o fuera de servicio. |
 
 **Integridad de la tabla de P1 (train): 2 condiciones no aprobadas.**
-- *PercentOfNulls*: `salidas_media_4sem` tiene nulos en las primeras 4 semanas de cada estación (no hay historia) y `capacidad` en las estaciones fuera del catálogo. Es esperado; el modelo los trata (HGB los maneja de forma nativa y Ridge imputa la mediana).
+- *PercentOfNulls*: `salidas_media_4sem` tiene nulos entre la semana 2 y la 4 de historia de cada estación (la primera semana ya se elimina en `construir_tabla`) y `capacidad` en las estaciones fuera del catálogo. Es esperado; el modelo los trata (HGB los maneja de forma nativa y Ridge imputa la mediana).
 - *Feature-Feature Correlation*: los rezagos y promedios de `salidas` están correlacionados entre sí, porque se calculan de la misma serie. No es un error, pero explica por qué Ridge necesita regularización.
 
 **Drift train vs test de P1: 3 condiciones no aprobadas.**
 - *New Category Train Test*: **102 estaciones del test no existen en train** (18.92% de las muestras de test). El sistema creció de 369 estaciones (train) a 413 (val) y 471 (test). Es el hallazgo principal. El modelo de P1 no usa `estacion_id` como variable (predice a partir de rezagos, promedios, calendario y capacidad), así que puede predecir estaciones nuevas; pero su historia es corta, y hasta tener 4 semanas de datos `salidas_media_4sem` queda vacía. En DeepChecks se declara `estacion_id` como categórica solo para detectar este cambio.
-- *Feature Drift*: solo `mes` (KS = 0.34) rebasa el umbral; es consecuencia directa de la partición temporal (train jul→mar, test jul→sep) y no un cambio en los datos. El resto de las variables tiene KS ≤ 0.07.
+- *Feature Drift*: solo `mes` (KS = 0.34) rebasa el umbral; es un drift real pero esperado: la partición temporal deja en test solo jul→sep, mientras train cubre jul→mar. Refleja estacionalidad por construcción, no un problema de calidad de datos. El resto de las variables tiene KS ≤ 0.07.
 - *Multivariate Drift*: el clasificador de dominio separa train y test con AUC 0.84, y la única variable importante es `mes`; confirma lo anterior.
-- *Label Drift: aprobado* (KS = 0.034). La media de salidas por estación-hora baja de 1.37 (train) a 1.26 (test), en parte porque las estaciones nuevas tienen menos uso.
+- *Label Drift: aprobado* (KS = 0.034). La media de salidas por estación-hora baja de 1.37 (train) a 1.26 (test), por las estaciones nuevas: en test promedian 0.45 salidas por hora, contra 1.45 de las estaciones que ya existían en train.
 
 **Fuga de información: aprobada.** Sin traslape ni duplicados de fechas entre train y test (*Date Train-Test Leakage*).
 

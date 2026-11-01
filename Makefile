@@ -73,6 +73,13 @@ deepchecks:
 	$(PYTHON_INTERPRETER) -m mibici_mlops.validacion
 	$(PYTHON_INTERPRETER) -m pytest tests/test_validacion.py
 
+## Run security checks (bandit, pip-audit) from an environment with requirements-security.txt
+.PHONY: security
+security:
+	$(PYTHON_INTERPRETER) -m bandit -r mibici_mlops -ll -q
+	$(PYTHON_INTERPRETER) -m pip_audit -r requirements.txt
+	$(PYTHON_INTERPRETER) -m pip_audit -r requirements-deepchecks.txt --ignore-vuln PYSEC-2026-3447 --ignore-vuln GHSA-xmj3-9gf7-h52w
+
 ## Run baseline experiments (P1, P2, P3) and log them to MLflow
 .PHONY: experiments
 experiments:
