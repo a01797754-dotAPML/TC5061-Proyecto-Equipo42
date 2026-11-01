@@ -305,6 +305,33 @@ La revisión permitió identificar y corregir una dependencia con una vulnerabil
 
 Los hallazgos de baja severidad de Bandit permanecen documentados para futuras revisiones. Las auditorías realizadas representan controles preventivos y no garantizan la ausencia total de vulnerabilidades.
 
+## Pruebas unitarias de P1 y reproducibilidad del entrenamiento
+
+`tests/test_features_p1.py` prueba las funciones de `mibici_mlops/features.py` que usa P1, con casos normales y casos límite, y verifica que el entrenamiento sea reproducible.
+
+| Función | Caso normal | Casos límite |
+|---|---|---|
+| `agregar_estacion_hora` | Cuenta salidas, llegadas y flujo neto por estación y hora | Viaje que cruza de hora; horas sin viajes en 0; estación que entra desde su primer viaje; estación que solo recibe llegadas; viajes fuera del rango del proyecto; entrada ya agregada |
+| `agregar_calendario` | Hora, día y mes de un lunes | Sábado y domingo marcados como fin de semana |
+| `agregar_rezagos` | Valor de la misma estación k horas antes | No se mezclan estaciones; cambiar el futuro no altera los rezagos (sin fuga) |
+| `agregar_promedios` | Media de 24 h y de la misma hora en 4 semanas | La media de 24 h excluye la hora que se predice; la de 4 semanas queda vacía sin 4 semanas de historia |
+| `agregar_capacidad` | Agrega la capacidad del catálogo | Quita estaciones con capacidad 0 o fuera del catálogo |
+| `particion_temporal` | Asigna train, val y test | Cortes exactos en las fechas de `config.py`; sin traslape entre conjuntos |
+
+**Reproducibilidad:** con una tabla sintética construida con las mismas funciones, Ridge y HGB entrenados dos veces dan predicciones idénticas, HGB usa `config.SEED` (42), y dos corridas de `p1.train("hgb")` registran en MLflow las mismas métricas de validación y test con `seed=42`.
+
+**Ejecución** (entorno `mibici`):
+
+- Solo P1: `python -m pytest tests/test_features_p1.py -v`
+- Todas las pruebas: `python -m pytest -q` (o `make test`)
+
+**Resultado:** 23 pruebas de P1 aprobadas; en la suite completa, 70 aprobadas y 1 omitida (`test_validacion.py`, que solo corre en el entorno de DeepChecks).
+
+![Pruebas de P1](docs/evidencias/pytest_p1_detalle.png)
+
+![Suite completa](docs/evidencias/pytest_completo.png)
+
+
 ## Validación de datos con DeepChecks
 
 `mibici_mlops/validacion.py` revisa la integridad de los datos procesados y el drift entre train y test de P1 con [DeepChecks](https://docs.deepchecks.com/stable/), y además cuenta reglas de negocio sobre todos los viajes.
