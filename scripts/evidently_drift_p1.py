@@ -10,7 +10,6 @@ from evidently.presets import DataDriftPreset, DataSummaryPreset
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "reports" / "evidently"
-THRESHOLD = 0.1
 
 
 def load_samples():
