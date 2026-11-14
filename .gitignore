@@ -248,3 +248,11 @@ reports/deepchecks/
 *.p12
 *.pfx
 credentials.json
+
+# Entorno virtual para monitoreo de Data Drift
+.venv-evidently/
+
+.venv-deepchecks/
+
+# Evidently: datos y reportes generados localmente
+reports/evidently/
