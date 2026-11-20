@@ -256,3 +256,6 @@ credentials.json
 
 # Evidently: datos y reportes generados localmente
 reports/evidently/
+
+# Actividad 10: salidas crudas de Locust y stats (las evidencias van en docs/evidencias/)
+reports/locust/
