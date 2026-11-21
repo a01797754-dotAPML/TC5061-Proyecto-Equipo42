@@ -1,0 +1,43 @@
+artifact_path: "file:C:/Users/Carlos Medina/Documents/a_Tec/Maestr\xEDa/4\xB0 Trimestre/MLOps/TC5061-Proyecto-Equipo42/mlruns/1/models/m-8b9912410a7940f5a474b3c81b1f83b0/artifacts"
+flavors:
+  python_function:
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.sklearn
+    model_path: model.skops
+    predict_fn: predict
+    python_version: 3.12.15
+  sklearn:
+    code: null
+    pickled_model: model.skops
+    serialization_format: skops
+    sklearn_version: 1.9.1
+    skops_trusted_types:
+    - sklearn.ensemble._hist_gradient_boosting.predictor.TreePredictor
+is_signature_from_type_hint: false
+mlflow_version: 3.17.2
+model_id: m-8b9912410a7940f5a474b3c81b1f83b0
+model_size_bytes: 3276248
+model_uuid: m-8b9912410a7940f5a474b3c81b1f83b0
+prompts: null
+run_id: 79607e53c25e457d8affc3684af473ea
+saved_input_example_info:
+  artifact_path: input_example.json
+  pandas_orient: split
+  serving_input_path: serving_input_example.json
+  type: dataframe
+signature:
+  inputs: '[{"type": "float", "name": "hora_dia", "required": true}, {"type": "float",
+    "name": "dia_semana", "required": true}, {"type": "float", "name": "es_fin_semana",
+    "required": true}, {"type": "float", "name": "mes", "required": true}, {"type":
+    "float", "name": "capacidad", "required": true}, {"type": "float", "name": "salidas_lag_1",
+    "required": true}, {"type": "float", "name": "salidas_lag_2", "required": true},
+    {"type": "float", "name": "salidas_lag_24", "required": true}, {"type": "float",
+    "name": "salidas_lag_168", "required": true}, {"type": "float", "name": "salidas_media_24h",
+    "required": true}, {"type": "float", "name": "salidas_media_4sem", "required":
+    true}]'
+  outputs: '[{"type": "tensor", "tensor-spec": {"dtype": "float64", "shape": [-1]}}]'
+  params: null
+type_hint_from_example: false
+utc_time_created: '2026-11-14 17:46:07.043038'
