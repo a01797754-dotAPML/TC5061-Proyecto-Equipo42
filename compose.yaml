@@ -1,4 +1,22 @@
 services:
+
+  bootstrap:
+    build:
+      context: .
+      dockerfile: Containerfile
+    command: ["python", "scripts/bootstrap_champion.py"]
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+    volumes:
+      - ./models/p1_champion:/app/models/p1_champion:ro
+      - ./scripts:/app/scripts:ro
+    depends_on:
+      mlflow:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - mibici-network
+
   mlflow:
     build:
       context: .
@@ -13,7 +31,7 @@ services:
       - server
       - --backend-store-uri
       - sqlite:////mlflow/db/mlflow.db
-      - --default-artifact-root
+      - --artifacts-destination
       - /mlflow/artifacts
       - --host
       - 0.0.0.0
@@ -57,9 +75,13 @@ services:
       API_WORKERS: "${API_WORKERS:-4}"
     ports:
       - "127.0.0.1:8000:8000"
+
     depends_on:
       mlflow:
         condition: service_healthy
+      bootstrap:
+        condition: service_completed_successfully
+
     healthcheck:
       test:
         - CMD
