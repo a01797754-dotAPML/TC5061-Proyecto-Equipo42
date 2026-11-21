@@ -226,6 +226,7 @@ mlflow.db
 
 models/*
 !models/.gitkeep
+!models/p1_champion/
 
 *.pkl
 *.pickle

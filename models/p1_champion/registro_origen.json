@@ -1,0 +1,9 @@
+{
+  "modelo": "mibici-equipo42-p1-demanda",
+  "alias": "champion",
+  "version": "2",
+  "run_id": "79607e53c25e457d8affc3684af473ea",
+  "source": "models:/m-8b9912410a7940f5a474b3c81b1f83b0",
+  "descripcion": "Challenger: mismo HGB del champion reentrenado con datos hasta ago-2026.",
+  "tracking_uri_origen": "http://127.0.0.1:5000"
+}
