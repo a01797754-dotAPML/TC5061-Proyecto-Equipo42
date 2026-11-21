@@ -3,6 +3,7 @@
 <a target="_blank" href="https://cookiecutter-data-science.drivendata.org/">
     <img src="https://img.shields.io/badge/CCDS-Project%20template-328F97?logo=cookiecutter" />
 </a>
+[![CI/CD](https://github.com/a01797754-dotAPML/TC5061-Proyecto-Equipo42/actions/workflows/ci.yml/badge.svg)](https://github.com/a01797754-dotAPML/TC5061-Proyecto-Equipo42/actions/workflows/ci.yml)
 
 Pipeline reproducible de Machine Learning sobre los datos abiertos de **MiBici**, el sistema de bicicleta pública del Área Metropolitana de Guadalajara. Primera entrega del proyecto integrador de TC5061 Operaciones de Aprendizaje Automático (Tecnológico de Monterrey).
 
