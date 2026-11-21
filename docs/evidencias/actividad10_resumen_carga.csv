@@ -1,0 +1,4 @@
+corrida,configuracion,workers,omp_num_threads,usuarios,duracion_s,peticiones,errores,rps_estable,predict_p50_ms,predict_p95_ms,predict_p99_ms,cpu_media_pct,cpu_pico_pct,mem_media_mb,cpu_ms_por_peticion,saturada
+A,1 worker,1,default,200,360,36093,0,102.0,1000,1200,1400,267.1,277.47,230.6,26.2,si
+B,4 workers,4,default,200,360,66924,0,190.7,43,76,130,346.1,406.27,872.2,18.1,no
+C,4 workers + OMP_NUM_THREADS=1,4,1,200,360,69516,0,198.5,5,22,41,82.7,204.58,827.8,4.2,no
