@@ -47,3 +47,18 @@ entorno de desarrollo confiable. No exponer el puerto 5000 a Internet.
 Para registrar el modelo champion de P1:
 
     python -m mibici_mlops.registry --question p1
+
+## Actividad 10 - Orquestación con Docker Compose
+
+El archivo `compose.yaml` permite iniciar la API FastAPI y el
+servidor MLflow mediante un solo comando.
+
+### Requisitos
+
+- Docker Desktop o Docker Engine con Docker Compose.
+- Puertos locales 8000 y 5000 disponibles.
+
+### Construcción e inicio
+
+```bash
+docker compose up -d --build

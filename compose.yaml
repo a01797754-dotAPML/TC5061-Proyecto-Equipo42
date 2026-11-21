@@ -1,0 +1,104 @@
+services:
+
+  bootstrap:
+    build:
+      context: .
+      dockerfile: Containerfile
+    command: ["python", "scripts/bootstrap_champion.py"]
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+    volumes:
+      - ./models/p1_champion:/app/models/p1_champion:ro
+      - ./scripts:/app/scripts:ro
+    depends_on:
+      mlflow:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - mibici-network
+
+  mlflow:
+    build:
+      context: .
+      dockerfile: Containerfile
+
+    user: "0:0"
+
+    command:
+      - python
+      - -m
+      - mlflow
+      - server
+      - --backend-store-uri
+      - sqlite:////mlflow/db/mlflow.db
+      - --artifacts-destination
+      - /mlflow/artifacts
+      - --host
+      - 0.0.0.0
+      - --port
+      - "5000"
+      - --allowed-hosts
+      - "localhost:*,127.0.0.1:*,mlflow:*"
+    ports:
+      - "127.0.0.1:5000:5000"
+    volumes:
+      - mlflow_db:/mlflow/db
+      - mlflow_artifacts:/mlflow/artifacts
+
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:5000/health', timeout=5)"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    
+    networks:
+      - mibici-network
+    
+  api:
+    build:
+      context: .
+      dockerfile: Containerfile
+    command:
+      - sh
+      - -c
+      - exec uvicorn mibici_mlops.api:app --host 0.0.0.0 --port 8000 --workers "$$API_WORKERS"
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MODEL_NAME: mibici-equipo42-p1-demanda
+      MODEL_ALIAS: champion
+      OMP_NUM_THREADS: "1"
+      API_WORKERS: "${API_WORKERS:-4}"
+    ports:
+      - "127.0.0.1:8000:8000"
+
+    depends_on:
+      mlflow:
+        condition: service_healthy
+      bootstrap:
+        condition: service_completed_successfully
+
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+    networks:
+      - mibici-network
+
+networks:
+  mibici-network:
+
+volumes:
+  mlflow_db:
+  mlflow_artifacts:
