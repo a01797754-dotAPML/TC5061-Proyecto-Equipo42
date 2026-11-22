@@ -843,3 +843,80 @@ El challenger cumple la regla definida antes de correr (IC del Δ MAE completo p
 ![MAE por hora y por segmento](reports/ab_test/ab_test_p1.png)
 
 Las tablas completas están en `docs/evidencias/actividad9_resultados_*.csv` (drift y calidad) y en `reports/ab_test/*.csv` (A/B). Otras capturas: `actividad9_principal_capacidad.png` y `actividad9_estacional_capacidad.png`.
+
+## Operación, pruebas de carga y FinOps — Actividad 10
+
+### 6. Análisis FinOps
+
+#### 6.1. Dimensionamiento observado
+
+El análisis FinOps se basa en las pruebas de carga realizadas sobre la configuración final del sistema con Docker Compose, utilizando cuatro workers de Uvicorn y `OMP_NUM_THREADS=1`.
+
+Las pruebas muestran que la API mantiene un comportamiento estable alrededor de 700 solicitudes por segundo (RPS). En la corrida de 800 usuarios se alcanzaron 699.6 RPS sin saturación, mientras que con 1,200 usuarios el sistema llegó a aproximadamente 890.1 RPS y comenzó a mostrar saturación mediante un incremento importante en la latencia.
+
+| Indicador | Valor observado |
+|---|---:|
+| Capacidad estable medida | 699.6 RPS |
+| Capacidad observada en saturación | 890.1 RPS |
+| CPU API cerca de saturación | 386.5 % ≈ 3.87 vCPU |
+| CPU por petición | ≈ 4.3 ms |
+| Memoria API | ≈ 869 MB |
+| Memoria MLflow | ≈ 2.28 GB |
+| Memoria total aproximada API + MLflow | ≈ 3.15 GB |
+| CPU MLflow | ≈ 2.1 % |
+| Errores durante la prueba | 0 |
+
+Estos resultados muestran que los dos servicios tienen perfiles de consumo distintos. La API concentra el uso de CPU a medida que aumenta la carga, mientras que MLflow mantiene un consumo de memoria considerable aun cuando su uso de CPU es bajo.
+
+Por lo tanto, el dimensionamiento mínimo del sistema no depende únicamente de la capacidad de inferencia de la API. El consumo cercano a 2.3 GB de RAM de MLflow representa una parte importante del costo fijo de infraestructura, mientras que el costo variable asociado al incremento de tráfico se relaciona principalmente con el CPU requerido por la API.
+
+
+#### 6.2. Costo estimado por inferencia
+
+Como referencia de infraestructura se considera una instancia CPU-Optimized de DigitalOcean con 4 vCPU y 8 GiB de memoria. Esta configuración es coherente con el comportamiento observado del sistema: la API llegó a utilizar cerca de 3.9 vCPU bajo carga alta y, junto con MLflow, el consumo de memoria fue aproximadamente 3.15 GB.
+
+El precio de referencia utilizado es de aproximadamente **84 USD al mes**, equivalente a **0.125 USD por hora** bajo el esquema de facturación considerado.
+
+Para evitar calcular el costo utilizando un sistema ya saturado, se toma como capacidad operativa de referencia la corrida de 800 usuarios, que alcanzó **699.6 RPS** sin saturación.
+
+La cantidad teórica de inferencias atendidas en una hora a ese nivel de utilización es:
+
+`699.6 × 3,600 = 2,518,560 inferencias/hora`
+
+Por lo tanto:
+
+`Costo por inferencia = 0.125 / 2,518,560 ≈ 0.0000000496 USD`
+
+y, expresado de forma más interpretable:
+
+`Costo por 1,000,000 de inferencias ≈ 0.0496 USD`
+
+| Indicador | Estimación |
+|---|---:|
+| Instancia de referencia | 4 vCPU / 8 GiB |
+| Costo de referencia | 0.125 USD/h |
+| Capacidad estable utilizada | 699.6 RPS |
+| Inferencias por hora | 2,518,560 |
+| Costo teórico por inferencia | ≈ 0.0000000496 USD |
+| Costo teórico por 1 millón de inferencias | ≈ 0.0496 USD |
+
+Este valor representa un escenario de **alta utilización sostenida** de la instancia. No debe interpretarse como el costo real de cada solicitud en cualquier nivel de tráfico, ya que el servidor genera costos aunque permanezca parcialmente ocioso. Por ello, con cargas bajas el costo efectivo por inferencia sería considerablemente mayor.
+
+Además, esta estimación considera principalmente el costo de cómputo de la instancia y no incorpora costos adicionales como almacenamiento persistente, transferencia de datos, respaldos o servicios administrados.
+
+
+#### 6.3. Optimizaciones propuestas
+
+A partir de las pruebas de carga y del consumo de recursos se identifican las siguientes optimizaciones:
+
+1. **Mantener `OMP_NUM_THREADS=1`.** Esta configuración redujo de forma importante el costo de CPU de cada petición. En las pruebas con cuatro workers, el consumo pasó de aproximadamente 18.1 ms de CPU por petición a cerca de 4.2 ms, al mismo tiempo que disminuyó la latencia. Para inferencias individuales con HistGradientBoosting, permitir paralelismo interno adicional genera sobrecarga sin aportar una mejora equivalente.
+
+2. **Escalar la API y MLflow de forma independiente.** MLflow consume aproximadamente 2.3 GB de memoria, pero alrededor de 2 % de CPU durante las pruebas, mientras que la API concentra el consumo de CPU cuando aumenta el tráfico. En un entorno productivo convendría evitar escalar ambos componentes como una sola unidad: MLflow puede mantenerse como servicio de control y registro, mientras que las réplicas de la API pueden aumentar o disminuir según la demanda.
+
+3. **No operar permanentemente en el punto de saturación.** Aunque el sistema alcanzó cerca de 890 RPS, en ese nivel la latencia aumentó de forma considerable. Para dimensionamiento operativo se recomienda conservar margen de capacidad y utilizar aproximadamente 700 RPS por instancia como referencia antes de considerar escalamiento horizontal.
+
+4. **Aplicar autoscaling según CPU, latencia o RPS.** Con poco tráfico, mantener una instancia dimensionada para casi 900 RPS eleva el costo efectivo por inferencia debido al tiempo ocioso. Un mecanismo de escalamiento permitiría utilizar menos capacidad en periodos de baja demanda y agregar réplicas de la API únicamente cuando se acerque al umbral operativo.
+
+5. **Revisar el despliegue permanente de MLflow.** Debido a que MLflow representa la mayor parte de la memoria consumida, alrededor de 2.3 GB frente a 0.85 GB de la API, su arquitectura tiene un impacto significativo en el costo mínimo del sistema. En producción puede evaluarse separar el Model Registry y el almacenamiento de artefactos del servicio de inferencia, de forma que el plano de serving no requiera escalar junto con MLflow.
+
+Estas optimizaciones muestran que reducir el costo no consiste únicamente en elegir una instancia más económica. La principal oportunidad está en asignar recursos de acuerdo con el perfil real de cada servicio: **CPU para la API, memoria para MLflow y escalamiento independiente para responder a variaciones de demanda**.
