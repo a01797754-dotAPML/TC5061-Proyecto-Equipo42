@@ -56,9 +56,30 @@ servidor MLflow mediante un solo comando.
 ### Requisitos
 
 - Docker Desktop o Docker Engine con Docker Compose.
-- Puertos locales 8000 y 5000 disponibles.
+- Puertos locales 8000 y 5000 disponibles. En macOS, AirPlay ocupa el 5000:
+  usa otro puerto del host con `MLFLOW_PORT=5001 docker compose up -d --build`.
 
 ### Construcción e inicio
 
 ```bash
 docker compose up -d --build
+```
+
+### Servicios
+
+1. `mlflow`: Tracking Server + Model Registry. Sirve los artefactos por HTTP
+   (`--artifacts-destination`), así que los modelos quedan como `mlflow-artifacts:/...`
+   y la API los descarga a través de `http://mlflow:5000`.
+2. `bootstrap`: se ejecuta una sola vez. Registra el champion exportado en
+   `models/p1_champion/` con el alias `champion`; si ya existe en el volumen, no hace nada.
+3. `api`: arranca cuando `mlflow` está `healthy` y `bootstrap` terminó con éxito.
+
+### Verificación
+
+```bash
+docker compose ps -a        # mlflow y api "healthy", bootstrap "Exited (0)"
+curl -s localhost:8000/health
+curl -s -X POST localhost:8000/predict -H 'content-type: application/json' \
+  -d '{"hora_dia":16,"dia_semana":2,"es_fin_semana":0,"mes":9,"capacidad":19,"salidas_lag_1":3,"salidas_lag_2":2,"salidas_lag_24":3,"salidas_lag_168":2,"salidas_media_24h":1.75,"salidas_media_4sem":5}'
+```
+
