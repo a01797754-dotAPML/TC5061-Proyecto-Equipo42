@@ -1,0 +1,5 @@
+corrida,configuracion,usuarios,duracion_s,peticiones,errores,rps_estable,predict_p50_ms,predict_p95_ms,predict_p99_ms,cpu_media_pct,cpu_pico_pct,mem_media_mb,cpu_ms_por_peticion,mlflow_cpu_media_pct,mlflow_mem_mb,saturada
+compose_C,Compose final: 4 workers + OMP_NUM_THREADS=1,200,360,69615,0,198.7,4,16,28,71.5,86.94,845.5,3.6,1.9,2298.9,no
+cap_400,Compose final: 4 workers + OMP_NUM_THREADS=1,400,180,67562,0,395.2,6,42,83,160.2,180.68,849.9,4.1,1.9,2285.9,no
+cap_800,Compose final: 4 workers + OMP_NUM_THREADS=1,800,180,119799,0,699.6,73,450,530,339.8,366.42,860.5,4.9,2.1,2292.3,no
+cap_1200,Compose final: 4 workers + OMP_NUM_THREADS=1,1200,180,152715,0,890.1,330,860,990,386.5,407.96,869.3,4.3,2.1,2281.2,si
