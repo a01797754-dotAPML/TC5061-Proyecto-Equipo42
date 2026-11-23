@@ -847,17 +847,104 @@ Las tablas completas están en `docs/evidencias/actividad9_resultados_*.csv` (dr
 
 ## Operación, pruebas de carga y FinOps — Actividad 10
 
+En esta actividad el servicio de la Actividad 8 pasa a ser un sistema operable: se levanta con un solo comando (Docker Compose), se prueba y se publica de forma automática (GitHub Actions), se mide bajo carga (Locust) y se estima su costo por inferencia (FinOps). La numeración de las secciones sigue la del reporte `TC5061_Operacion_FinOps_Equipo42.pdf`.
+
+### 2. Levantar el sistema con Docker Compose
+
+`compose.yaml` define tres servicios en la red interna `mibici-network`:
+
+| Servicio | Qué hace |
+|---|---|
+| `mlflow` | Tracking Server + Model Registry (MLflow 3.17.2). SQLite en el volumen `mlflow_db` y artefactos servidos por HTTP (`--artifacts-destination`, volumen `mlflow_artifacts`). Healthcheck en `/health`. |
+| `bootstrap` | Se ejecuta una vez: registra el champion exportado en `models/p1_champion/` (versión 2 de P1) con el alias `champion`. Si ya existe en el volumen, no hace nada. |
+| `api` | FastAPI con `API_WORKERS=4` y `OMP_NUM_THREADS=1`. Arranca cuando `mlflow` está `healthy` y `bootstrap` terminó con éxito. Healthcheck en `/health`. |
+
+Requisitos: Docker Desktop (o Docker Engine con Compose) y los puertos 8000 y 5000 libres. Desde la raíz del repositorio:
+
+```powershell
+docker compose up -d --build
+docker compose ps -a        # mlflow y api "healthy", bootstrap "Exited (0)"
+```
+
+Si el puerto 5000 está ocupado (en macOS lo usa AirPlay), se cambia el puerto del host:
+
+```powershell
+$env:MLFLOW_PORT="5001"; docker compose up -d --build     # PowerShell
+MLFLOW_PORT=5001 docker compose up -d --build             # bash / zsh
+```
+
+Probar la API (PowerShell):
+
+```powershell
+Invoke-RestMethod http://localhost:8000/health
+$body = '{"hora_dia":16,"dia_semana":2,"es_fin_semana":0,"mes":9,"capacidad":19,"salidas_lag_1":3,"salidas_lag_2":2,"salidas_lag_24":3,"salidas_lag_168":2,"salidas_media_24h":1.75,"salidas_media_4sem":5}'
+Invoke-RestMethod -Method Post -Uri http://localhost:8000/predict -ContentType "application/json" -Body $body
+```
+
+La UI de MLflow queda en http://127.0.0.1:5000 (o en el puerto de `MLFLOW_PORT`). Para detener el sistema: `docker compose down` (conserva los volúmenes) o `docker compose down -v` (los borra; el `bootstrap` vuelve a registrar el champion en el siguiente arranque). Más detalle en [`DEPLOYMENT.md`](DEPLOYMENT.md).
+
+### 3. Pipeline de CI/CD con GitHub Actions
+
+El workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) corre en cada push a `main`, en cada Pull Request hacia `main` y a mano (Actions → CI/CD → Run workflow):
+
+1. **tests**: PyTest en matriz Ubuntu + Windows, Python 3.12, con caché de pip.
+2. **build**: imagen de la API con Buildx y caché de capas; en `main` se publica en GitHub Container Registry (`ghcr.io/a01797754-dotapml/mibici-api`, etiquetas `latest` y SHA corto).
+3. **compose** (despliegue): `docker compose up` en un runner limpio, espera a `/health` y hace smoke test de `/predict` (200) y de una entrada inválida (422); guarda `docker stats`.
+4. **resumen**: tabla con el resultado de cada job en el resumen de la ejecución.
+
+Cómo ejecutarlo: abrir un PR hacia `main` (los checks aparecen en el PR) o lanzarlo a mano desde la pestaña **Actions**. El estado de `main` se ve en el badge al inicio de este README. Detalle, optimizaciones y resultados de la primera corrida en verde en [`docs/CI_CD.md`](docs/CI_CD.md).
+
+Antes de hacer push se puede validar lo mismo en local:
+
+```powershell
+python -m pytest tests -q
+docker compose config --quiet
+```
+
+### 4. Pruebas de carga con Locust
+
+El escenario ([`load_tests/locustfile.py`](load_tests/locustfile.py)) simula usuarios que envían una fila real de sep-2026 por petición (`load_tests/payloads.json`) a `POST /predict` (peso 10) y a `GET /health` (peso 1), con una espera de 0.5 a 1.5 s entre peticiones. Cuenta como fallo cualquier respuesta distinta de 200 o sin `prediction`.
+
+Reproducción con el sistema levantado (entorno aparte para no mezclar versiones con el proyecto):
+
+```bash
+conda create -n mibici-locust python=3.12 && conda activate mibici-locust
+python -m pip install -r requirements-loadtest.txt
+scripts/capturar_stats.sh reports/locust/stats_C.csv docker 2 &      # CPU y memoria cada 2 s
+python -m locust -f load_tests/locustfile.py --host http://localhost:8000 \
+  --headless -u 400 -r 20 -t 3m --processes 4 --csv reports/locust/cap_400
+python scripts/graficas_locust.py reports/locust/cap_400 reports/locust/stats_C.csv docs/evidencias/actividad10_cap_400
+```
+
+`capturar_stats.sh` necesita bash (macOS, Linux, WSL o Git Bash en Windows). En PowerShell se puede usar `docker stats` directamente en otra terminal.
+
+Resultados principales (0 errores en todas las corridas):
+
+| Corrida | RPS | p95 de `/predict` | CPU por petición |
+|---|---:|---:|---:|
+| A: 1 worker, 200 usuarios | 102 (saturada) | 1,200 ms | 26.2 ms |
+| B: 4 workers, 200 usuarios | 191 | 76 ms | 18.1 ms |
+| C: 4 workers + `OMP_NUM_THREADS=1`, Compose, 200 usuarios | 199 | 16 ms | 3.6 ms |
+| C, 400 usuarios | 395 | 42 ms | 4.1 ms |
+| C, 800 usuarios | 700 | 450 ms (degradada) | 4.9 ms |
+| C, 1,200 usuarios | 890 | 860 ms (saturada) | 4.3 ms |
+
+Datos completos en `docs/evidencias/actividad10_resumen_carga.csv` y `docs/evidencias/actividad10_capacidad_compose.csv`; gráficas en `docs/evidencias/actividad10_*.png`.
+
+![Capacidad del Compose final](docs/evidencias/actividad10_capacidad.png)
+
 ### 6. Análisis FinOps
 
 #### 6.1. Dimensionamiento observado
 
 El análisis FinOps se basa en las pruebas de carga realizadas sobre la configuración final del sistema con Docker Compose, utilizando cuatro workers de Uvicorn y `OMP_NUM_THREADS=1`.
 
-Las pruebas muestran que la API mantiene un comportamiento estable alrededor de 700 solicitudes por segundo (RPS). En la corrida de 800 usuarios se alcanzaron 699.6 RPS sin saturación, mientras que con 1,200 usuarios el sistema llegó a aproximadamente 890.1 RPS y comenzó a mostrar saturación mediante un incremento importante en la latencia.
+Con 400 usuarios la API atendió 395.2 solicitudes por segundo (RPS) con un p95 de 42 ms, dentro del objetivo de servicio (p95 < 200 ms). Con 800 usuarios llegó a 699.6 RPS sin errores, pero el p95 subió a 450 ms (servicio degradado), y con 1,200 usuarios alcanzó aproximadamente 890.1 RPS ya saturada (p95 de 860 ms).
 
 | Indicador | Valor observado |
 |---|---:|
-| Capacidad estable medida | 699.6 RPS |
+| Capacidad dentro del SLO (p95 < 200 ms) | 395.2 RPS |
+| Capacidad con servicio degradado (p95 450 ms) | 699.6 RPS |
 | Capacidad observada en saturación | 890.1 RPS |
 | CPU API cerca de saturación | 386.5 % ≈ 3.87 vCPU |
 | CPU por petición | ≈ 4.3 ms |
@@ -876,30 +963,30 @@ Por lo tanto, el dimensionamiento mínimo del sistema no depende únicamente de 
 
 Como referencia de infraestructura se considera una instancia CPU-Optimized de DigitalOcean con 4 vCPU y 8 GiB de memoria. Esta configuración es coherente con el comportamiento observado del sistema: la API llegó a utilizar cerca de 3.9 vCPU bajo carga alta y, junto con MLflow, el consumo de memoria fue aproximadamente 3.15 GB.
 
-El precio de referencia utilizado es de aproximadamente **84 USD al mes**, equivalente a **0.125 USD por hora** bajo el esquema de facturación considerado.
+El precio de referencia utilizado es de **84 USD al mes**, equivalente a **0.115 USD por hora** (84 ÷ 730 h). DigitalOcean cobra 0.125 USD/h con un tope de 84 USD al mes, así que para un servicio encendido 24/7 el costo efectivo por hora es de 0.115 USD.
 
-Para evitar calcular el costo utilizando un sistema ya saturado, se toma como capacidad operativa de referencia la corrida de 800 usuarios, que alcanzó **699.6 RPS** sin saturación.
+Para evitar calcular el costo con un sistema saturado o degradado, se toma como capacidad operativa de referencia la corrida de 400 usuarios, que alcanzó **395.2 RPS** con un p95 de 42 ms. A 800 usuarios (699.6 RPS) el p95 ya era de 450 ms, fuera del SLO.
 
 La cantidad teórica de inferencias atendidas en una hora a ese nivel de utilización es:
 
-`699.6 × 3,600 = 2,518,560 inferencias/hora`
+`395.2 × 3,600 = 1,422,720 inferencias/hora`
 
 Por lo tanto:
 
-`Costo por inferencia = 0.125 / 2,518,560 ≈ 0.0000000496 USD`
+`Costo por inferencia = 0.115 / 1,422,720 ≈ 0.0000000808 USD`
 
 y, expresado de forma más interpretable:
 
-`Costo por 1,000,000 de inferencias ≈ 0.0496 USD`
+`Costo por 1,000,000 de inferencias ≈ 0.081 USD`
 
 | Indicador | Estimación |
 |---|---:|
 | Instancia de referencia | 4 vCPU / 8 GiB |
-| Costo de referencia | 0.125 USD/h |
-| Capacidad estable utilizada | 699.6 RPS |
-| Inferencias por hora | 2,518,560 |
-| Costo teórico por inferencia | ≈ 0.0000000496 USD |
-| Costo teórico por 1 millón de inferencias | ≈ 0.0496 USD |
+| Costo de referencia | 0.115 USD/h |
+| Capacidad utilizada (dentro del SLO) | 395.2 RPS |
+| Inferencias por hora | 1,422,720 |
+| Costo teórico por inferencia | ≈ 0.0000000808 USD |
+| Costo teórico por 1 millón de inferencias | ≈ 0.081 USD |
 
 Este valor representa un escenario de **alta utilización sostenida** de la instancia. No debe interpretarse como el costo real de cada solicitud en cualquier nivel de tráfico, ya que el servidor genera costos aunque permanezca parcialmente ocioso. Por ello, con cargas bajas el costo efectivo por inferencia sería considerablemente mayor.
 
@@ -914,7 +1001,7 @@ A partir de las pruebas de carga y del consumo de recursos se identifican las si
 
 2. **Escalar la API y MLflow de forma independiente.** MLflow consume aproximadamente 2.3 GB de memoria, pero alrededor de 2 % de CPU durante las pruebas, mientras que la API concentra el consumo de CPU cuando aumenta el tráfico. En un entorno productivo convendría evitar escalar ambos componentes como una sola unidad: MLflow puede mantenerse como servicio de control y registro, mientras que las réplicas de la API pueden aumentar o disminuir según la demanda.
 
-3. **No operar permanentemente en el punto de saturación.** Aunque el sistema alcanzó cerca de 890 RPS, en ese nivel la latencia aumentó de forma considerable. Para dimensionamiento operativo se recomienda conservar margen de capacidad y utilizar aproximadamente 700 RPS por instancia como referencia antes de considerar escalamiento horizontal.
+3. **No operar permanentemente en el punto de saturación.** Aunque el sistema alcanzó cerca de 890 RPS, en ese nivel la latencia aumentó de forma considerable. Para dimensionamiento operativo se recomienda conservar margen de capacidad y utilizar aproximadamente 400 RPS por instancia (la capacidad medida que cumple p95 < 200 ms) como referencia antes de considerar escalamiento horizontal.
 
 4. **Aplicar autoscaling según CPU, latencia o RPS.** Con poco tráfico, mantener una instancia dimensionada para casi 900 RPS eleva el costo efectivo por inferencia debido al tiempo ocioso. Un mecanismo de escalamiento permitiría utilizar menos capacidad en periodos de baja demanda y agregar réplicas de la API únicamente cuando se acerque al umbral operativo.
 

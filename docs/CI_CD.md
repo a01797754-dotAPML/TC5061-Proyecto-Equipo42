@@ -61,4 +61,13 @@ docker compose config --quiet
 
 ## Resultados
 
-_Pendiente: se llena con la primera ejecución en verde (duración por job, número de pruebas y respuesta de `/predict`)._
+Corrida del merge del PR #39 en `main` (commit `782fb40`, run `45012773630`): los cinco checks en verde (las pruebas cuentan dos porque corren en Ubuntu y en Windows) en **8 min 36 s**.
+
+| Resultado | Valor |
+|---|---|
+| Pruebas | 105 aprobadas y 1 omitida, en Ubuntu y en Windows |
+| Duración de las pruebas | Ubuntu 2 min 20 s; Windows 6 min 11 s (la ruta crítica del pipeline) |
+| Smoke test con Compose | `POST /predict` → HTTP 200, `{"prediction": 3.175}`; entrada inválida → 422 |
+| `concurrency` | La corrida del merge anterior (#40) quedó cancelada al llegar el merge del #39, como estaba previsto |
+
+La duración la marca el job de Windows: si en algún momento hiciera falta acelerar el pipeline, la primera opción sería correr Windows solo en los PRs y dejar Ubuntu en cada push.
