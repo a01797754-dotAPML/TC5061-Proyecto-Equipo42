@@ -168,6 +168,8 @@ Esquema de ciclo de vida: **aliases** (el esquema vigente de MLflow; las etapas 
 
 Al registrar cada versión se copian `git_commit` y `data_version` del run como tags de la versión, para que el linaje se vea en la página del modelo.
 
+La selección del champion, las versiones con sus aliases, el estado de producción y el linaje de punta a punta (hasta el Registry de Compose y la API) están en [`docs/MODEL_REGISTRY.md`](docs/MODEL_REGISTRY.md).
+
 ### 5. Reproducir la experimentación completa (corrida oficial)
 
 Con el servidor de tracking arriba y `MLFLOW_TRACKING_URI` apuntando a él, desde un clon limpio. El **orden importa** en P1: `hgb-final` toma la mejor combinación de la última `p1-hgb-search`.
