@@ -3,7 +3,62 @@
   "alias": "champion",
   "version": "2",
   "run_id": "79607e53c25e457d8affc3684af473ea",
+  "run_name": "p1-hgb-challenger",
+  "experimento": "mibici-equipo42",
   "source": "models:/m-8b9912410a7940f5a474b3c81b1f83b0",
   "descripcion": "Challenger: mismo HGB del champion reentrenado con datos hasta ago-2026.",
-  "tracking_uri_origen": "http://127.0.0.1:5000"
+  "tracking_uri_origen": "sqlite:///mlflow.db",
+  "tags_version": {
+    "question": "p1",
+    "run_id": "79607e53c25e457d8affc3684af473ea",
+    "run_name": "p1-hgb-challenger",
+    "git_commit": "b04dc11ac3e877e3e5f23fca3ea3a73ba1e56ca9",
+    "data_version": "2a196cfa2823"
+  },
+  "tags_run": {
+    "equipo": "42",
+    "question": "P1",
+    "git_commit": "b04dc11ac3e877e3e5f23fca3ea3a73ba1e56ca9",
+    "git_cambios_sin_commit": "True",
+    "model_family": "hgb",
+    "stage_of_work": "candidate"
+  },
+  "params": {
+    "fecha_inicio": "2025-07-01",
+    "fecha_fin": "2026-09-30",
+    "val_inicio": "2026-04-01",
+    "test_inicio": "2026-07-01",
+    "data_version": "2a196cfa2823",
+    "seed": "42",
+    "modelo": "hgb",
+    "entrenado_con": "train+val+jul-ago-2026",
+    "entreno_fin": "2026-09-01",
+    "learning_rate": "0.05",
+    "max_leaf_nodes": "63"
+  },
+  "metricas": {
+    "test_sep_mae": 0.8355920971780492,
+    "test_sep_rmse": 1.521224754834986
+  },
+  "historial_versiones": [
+    {
+      "version": "1",
+      "run_id": "677bdd39e3aa48509a81b9742ce4bdcf",
+      "run_name": "p1-hgb-final",
+      "aliases": [
+        "champion_anterior"
+      ],
+      "creada": "2026-11-07 11:38"
+    },
+    {
+      "version": "2",
+      "run_id": "79607e53c25e457d8affc3684af473ea",
+      "run_name": "p1-hgb-challenger",
+      "aliases": [
+        "challenger",
+        "champion"
+      ],
+      "creada": "2026-11-14 11:46"
+    }
+  ]
 }

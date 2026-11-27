@@ -146,6 +146,21 @@ jobs:
             -H "Content-Type: application/json" -d '{"hora_dia": 25}')
           test "$code" = "422"
 
+      - name: Linaje del champion en el Model Registry
+        run: |
+          curl -fsS "http://localhost:5000/api/2.0/mlflow/registered-models/alias?name=mibici-equipo42-p1-demanda&alias=champion" \
+            -o champion.json
+          jq '.model_version | {version, aliases, description, tags: (.tags | map({(.key): .value}) | add)}' champion.json
+          esperado=$(jq -r '.run_id' models/p1_champion/registro_origen.json)
+          jq -e --arg r "$esperado" '.model_version.tags | map(select(.key == "origen_run_id" and .value == $r)) | length == 1' champion.json
+          jq -e '.model_version.tags | map(select(.key == "git_commit" or .key == "data_version")) | map(.value | length > 0) | length == 2 and all' champion.json
+          {
+            echo "### Linaje del champion en el Registry de Compose"
+            echo '```json'
+            jq '.model_version | {version, aliases, tags: (.tags | map({(.key): .value}) | add)}' champion.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Estado y consumo de los contenedores
         if: always()
         run: |
