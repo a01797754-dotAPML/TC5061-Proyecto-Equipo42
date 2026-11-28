@@ -5,7 +5,29 @@
 </a>
 [![CI/CD](https://github.com/a01797754-dotAPML/TC5061-Proyecto-Equipo42/actions/workflows/ci.yml/badge.svg)](https://github.com/a01797754-dotAPML/TC5061-Proyecto-Equipo42/actions/workflows/ci.yml)
 
-Pipeline reproducible de Machine Learning sobre los datos abiertos de **MiBici**, el sistema de bicicleta pública del Área Metropolitana de Guadalajara. Primera entrega del proyecto integrador de TC5061 Operaciones de Aprendizaje Automático (Tecnológico de Monterrey).
+Pipeline reproducible de Machine Learning sobre los datos abiertos de **MiBici**, el sistema de bicicleta pública del Área Metropolitana de Guadalajara. Proyecto integrador final de TC5061 Operaciones de Aprendizaje Automático (Tecnológico de Monterrey): un sistema de ML de punta a punta, desde la ingesta hasta un modelo trazable sirviendo predicciones, con CI/CD, monitoreo y gobernanza.
+
+## Proyecto final: dónde está cada componente
+
+El sistema predice cuántos viajes iniciarán en cada estación en la siguiente hora (P1) y lo sirve con una API. Este README se fue construyendo por actividad; esta tabla junta los componentes de la entrega final.
+
+| Componente | Dónde está |
+|---|---|
+| Estructura Cookiecutter Data Science | Sección "Estructura del repositorio" |
+| Ingesta versionada y feature engineering | `mibici_mlops/dataset.py`, `mibici_mlops/features.py`, `data_manifest.json` |
+| Código como MLflow Project | `MLproject`, `python_env.yaml`, sección "MLflow Project (entrega 2)" |
+| Seguimiento de experimentos (MLflow Tracking) | `mibici_mlops/tracking.py`, [`docs/MODEL_REGISTRY.md`](docs/MODEL_REGISTRY.md) §1–2, `docs/evidencias/actividad11_experimentos_p1.csv` |
+| Model Registry, linaje y estado de producción | [`docs/MODEL_REGISTRY.md`](docs/MODEL_REGISTRY.md) |
+| API con FastAPI y contenedor | `mibici_mlops/api/`, `Containerfile`, sección "Servicio de inferencia con FastAPI y contenedor — Actividad 8" |
+| Orquestación con Docker Compose | `compose.yaml`, [`DEPLOYMENT.md`](DEPLOYMENT.md) |
+| CI/CD con GitHub Actions | `.github/workflows/ci.yml`, [`docs/CI_CD.md`](docs/CI_CD.md) |
+| Pruebas de carga con Locust | `load_tests/locustfile.py`, sección "Operación, pruebas de carga y FinOps — Actividad 10" |
+| Reporte de drift con Evidently | [`docs/EVIDENTLY_DATA_DRIFT_P1.md`](docs/EVIDENTLY_DATA_DRIFT_P1.md) |
+| A/B testing entre versiones | `mibici_mlops/monitoring/ab_test_p1.py`, [`docs/AB_TEST_P1.md`](docs/AB_TEST_P1.md) |
+| Análisis FinOps | Sección "Operación, pruebas de carga y FinOps — Actividad 10", §6 |
+| Model Card | [`MODEL_CARD.md`](MODEL_CARD.md) |
+
+Para levantar el sistema completo en un clon limpio: `docker compose up -d --build` y luego `POST http://localhost:8000/predict` (ver [`DEPLOYMENT.md`](DEPLOYMENT.md)).
 
 ## Propósito
 
